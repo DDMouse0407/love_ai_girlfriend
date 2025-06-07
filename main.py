@@ -7,6 +7,7 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageCo
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
 from gpt_chat import ask_openai
+import uvicorn
 import openai
 import os
 import sqlite3
@@ -26,9 +27,6 @@ handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 api_client = ApiClient(configuration=config)
 line_bot_api = MessagingApi(api_client=api_client)
-
-# 設定 OpenAI Key
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # 初始化 SQLite 使用者資料表
 conn = sqlite3.connect("users.db", check_same_thread=False)
@@ -116,7 +114,6 @@ def is_over_token_quota():
         return usage > (limit * 0.8)
     except:
         return False
-import uvicorn
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
