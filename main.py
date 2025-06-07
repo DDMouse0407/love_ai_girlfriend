@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
 from linebot.v3.webhook import WebhookHandler
-from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessage, ImageMessage, Configuration
+from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessage, ImageMessage
+from linebot.v3.messaging.api_client import ApiClient
+from linebot.v3.messaging.configuration import Configuration
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
@@ -12,17 +14,22 @@ from image_generator import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
 
+# 載入環境變數
 load_dotenv()
+
+# 初始化 FastAPI 與 LINE Bot Handler
 app = FastAPI()
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-# 修正初始化 MessagingApi 的方式
+# 建立 LINE Messaging API 客戶端
 config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
-line_bot_api = MessagingApi(configuration=config)
+api_client = ApiClient(configuration=config)
+line_bot_api = MessagingApi(api_client=api_client)
 
+# 設定 OpenAI Key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# 資料庫初始化
+# 初始化 SQLite 使用者資料表
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -63,7 +70,7 @@ def handle_text(event):
     if result is None:
         cursor.execute("INSERT INTO users (user_id, msg_count, is_paid) VALUES (?, ?, ?)", (user_id, 1, 0))
         conn.commit()
-        response = wrap_as_rina(ask_openai(message_text).strip())
+        response = wrap_as_rina(ask_openai(message_text))
     else:
         msg_count, is_paid = result
         if is_paid or msg_count < 3:
@@ -88,20 +95,17 @@ def handle_text(event):
 @handler.add(MessageEvent, message=ImageMessageContent)
 def handle_image(event):
     prompt = "a romantic anime girl selfie"
-    try:
-        image_bytes = generate_image_bytes(prompt)
-        image_url = upload_image_to_r2(image_bytes)
-        reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
-    except Exception as e:
-        image_url = None
-        reply_text = f"小熒今天畫不出來了…（{e}）"
-    
-    messages = [TextMessage(text=reply_text)]
-    if image_url:
-        messages.append(ImageMessage(original_content_url=image_url, preview_image_url=image_url))
-    
+    image_bytes = generate_image_bytes(prompt)
+    image_url = upload_image_to_r2(image_bytes)
+    reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
     line_bot_api.reply_message_with_http_info(
-        ReplyMessageRequest(reply_token=event.reply_token, messages=messages)
+        ReplyMessageRequest(
+            reply_token=event.reply_token,
+            messages=[
+                TextMessage(text=reply_text),
+                ImageMessage(original_content_url=image_url, preview_image_url=image_url)
+            ]
+        )
     )
 
 def ask_openai(prompt):
