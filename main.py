@@ -40,6 +40,11 @@ CREATE TABLE IF NOT EXISTS users (
 """)
 conn.commit()
 
+# ✅ 加入 webhook GET 驗證路徑
+@app.get("/callback")
+async def verify_webhook():
+    return "OK"
+
 @app.post("/callback")
 async def callback(request: Request):
     signature = request.headers.get("x-line-signature")
@@ -106,6 +111,7 @@ def handle_image(event):
             ]
         )
     )
+
 def is_over_token_quota():
     try:
         headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
