@@ -12,7 +12,6 @@ def ask_openai(prompt: str) -> str:
         {"role": "user", "content": prompt}
     ]
 )
-        )
         return completion.choices[0].message.content.strip()
     except Exception as e:
         return f"小熒今天有點當機了… {str(e)}"
