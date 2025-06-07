@@ -4,3 +4,6 @@ line-bot-sdk
 openai
 python-dotenv
 requests
+diffusers
+transformers
+torch
