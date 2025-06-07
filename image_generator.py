@@ -2,7 +2,7 @@ import requests
 import os
 from io import BytesIO
 
-HUGGING_FACE_API = "https://api-inference.huggingface.co/models/YOUR_SPACE_NAME"
+HUGGING_FACE_API = "https://api-inference.huggingface.co/models/moneymm258"
 HEADERS = {
     "Authorization": f"Bearer {os.getenv('HF_API_KEY')}",
     "Content-Type": "application/json"
