@@ -1,9 +1,9 @@
-import os
 import random
 
-def get_sample_image():
-    folder = "static/sample_images"
-    images = [f for f in os.listdir(folder) if f.lower().endswith(('.jpg', '.png'))]
-    if not images:
-        return None
-    return os.path.join(folder, random.choice(images))
+def get_random_image_url():
+    urls = [
+        "https://i.imgur.com/QxXgGFE.jpg",
+        "https://i.imgur.com/sq7dtKF.jpg",
+        "https://i.imgur.com/IjRohfZ.jpg"
+    ]
+    return random.choice(urls)
