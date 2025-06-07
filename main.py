@@ -4,41 +4,35 @@ from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessage,
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.config import Configuration
-
 from dotenv import load_dotenv
 import openai
 import os
 import sqlite3
+import time
 import requests
-from image_generator import generate_image_url
+from image_generator import generate_image_bytes
+from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
 
-# 載入環境變數
 load_dotenv()
-
 app = FastAPI()
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
-
-# 初始化 LINE Messaging API
 config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 line_bot_api = MessagingApi(configuration=config)
-
-# 設定 OpenAI 金鑰
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# 初始化 SQLite 資料庫
+# 資料庫初始化
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
-cursor.execute('''
+cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     msg_count INTEGER DEFAULT 0,
     is_paid INTEGER DEFAULT 0
 )
-''')
+""")
 conn.commit()
 
-# Webhook 入口
 @app.post("/callback")
 async def callback(request: Request):
     signature = request.headers.get("x-line-signature")
@@ -49,7 +43,6 @@ async def callback(request: Request):
         return "Invalid signature"
     return "OK"
 
-# 金流付款通知
 @app.post("/payment_callback")
 async def payment_callback(request: Request):
     data = await request.json()
@@ -59,12 +52,10 @@ async def payment_callback(request: Request):
         conn.commit()
     return {"status": "paid"}
 
-# 處理文字訊息
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text(event):
     user_id = event.source.user_id
     message_text = event.message.text
-
     cursor.execute("SELECT msg_count, is_paid FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
 
@@ -93,10 +84,11 @@ def handle_text(event):
         )
     )
 
-# 處理圖片訊息
 @handler.add(MessageEvent, message=ImageMessageContent)
 def handle_image(event):
-    image_url = generate_image_url("a romantic anime girl selfie")
+    prompt = "a romantic anime girl selfie"
+    image_bytes = generate_image_bytes(prompt)
+    image_url = upload_image_to_r2(image_bytes)
     reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
@@ -108,7 +100,6 @@ def handle_image(event):
         )
     )
 
-# GPT 回應邏輯
 def ask_openai(prompt):
     try:
         completion = openai.ChatCompletion.create(
@@ -119,7 +110,6 @@ def ask_openai(prompt):
     except Exception as e:
         return f"小熒今天有點當機了… {str(e)}"
 
-# GPT token 預警（用掉 80% 限制）
 def is_over_token_quota():
     try:
         headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
