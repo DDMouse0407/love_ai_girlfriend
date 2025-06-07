@@ -126,3 +126,7 @@ def is_over_token_quota():
         return usage > (limit * 0.8)
     except:
         return False
+import uvicorn
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
