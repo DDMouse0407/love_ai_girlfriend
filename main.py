@@ -18,7 +18,7 @@ handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
 # 修正初始化 MessagingApi 的方式
 config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
-line_bot_api = MessagingApi(config)
+line_bot_api = MessagingApi(configuration=config)
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -63,7 +63,7 @@ def handle_text(event):
     if result is None:
         cursor.execute("INSERT INTO users (user_id, msg_count, is_paid) VALUES (?, ?, ?)", (user_id, 1, 0))
         conn.commit()
-        response = wrap_as_rina(ask_openai(message_text))
+        response = wrap_as_rina(ask_openai(message_text).strip())
     else:
         msg_count, is_paid = result
         if is_paid or msg_count < 3:
@@ -88,17 +88,20 @@ def handle_text(event):
 @handler.add(MessageEvent, message=ImageMessageContent)
 def handle_image(event):
     prompt = "a romantic anime girl selfie"
-    image_bytes = generate_image_bytes(prompt)
-    image_url = upload_image_to_r2(image_bytes)
-    reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
+    try:
+        image_bytes = generate_image_bytes(prompt)
+        image_url = upload_image_to_r2(image_bytes)
+        reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
+    except Exception as e:
+        image_url = None
+        reply_text = f"小熒今天畫不出來了…（{e}）"
+    
+    messages = [TextMessage(text=reply_text)]
+    if image_url:
+        messages.append(ImageMessage(original_content_url=image_url, preview_image_url=image_url))
+    
     line_bot_api.reply_message_with_http_info(
-        ReplyMessageRequest(
-            reply_token=event.reply_token,
-            messages=[
-                TextMessage(text=reply_text),
-                ImageMessage(original_content_url=image_url, preview_image_url=image_url)
-            ]
-        )
+        ReplyMessageRequest(reply_token=event.reply_token, messages=messages)
     )
 
 def ask_openai(prompt):
