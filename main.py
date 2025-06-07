@@ -3,7 +3,7 @@ from linebot.v3.webhook import WebhookHandler
 from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessage, ImageMessage
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.config import Configuration
+from linebot.v3.messaging import Configuration
 from dotenv import load_dotenv
 import openai
 import os
