@@ -1,14 +1,12 @@
 from fastapi import FastAPI, Request
 from linebot.v3.webhook import WebhookHandler
-from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessage, ImageMessage
+from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessage, ImageMessage, Configuration
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.messaging import Configuration
 from dotenv import load_dotenv
 import openai
 import os
 import sqlite3
-import time
 import requests
 from image_generator import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
@@ -17,8 +15,11 @@ from style_prompt import wrap_as_rina
 load_dotenv()
 app = FastAPI()
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+
+# 修正初始化 MessagingApi 的方式
 config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
-line_bot_api = MessagingApi()
+line_bot_api = MessagingApi(config)
+
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # 資料庫初始化
