@@ -9,8 +9,7 @@ import os
 import sqlite3
 import time
 import requests
-import random
-from image_generator import get_random_image_url
+import randomfrom image_generator import generate_image_url
 from style_prompt import wrap_as_rina
 
 load_dotenv()
@@ -87,7 +86,7 @@ def handle_text(event):
 
 @handler.add(MessageEvent, message=ImageMessageContent)
 def handle_image(event):
-    image_url = get_random_image_url()
+   image_url = generate_image_url("a romantic anime girl selfie")
     reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
