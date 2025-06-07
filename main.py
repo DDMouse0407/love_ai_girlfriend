@@ -18,7 +18,7 @@ load_dotenv()
 app = FastAPI()
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
-line_bot_api = MessagingApi(configuration=config)
+line_bot_api = MessagingApi()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # 資料庫初始化
