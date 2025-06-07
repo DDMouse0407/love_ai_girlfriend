@@ -16,7 +16,10 @@ from style_prompt import wrap_as_rina
 load_dotenv()
 app = FastAPI()
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
-line_bot_api = MessagingApi(channel_access_token=os.getenv("LINE_ACCESS_TOKEN"))
+from linebot.v3.config import Configuration
+
+config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
+line_bot_api = MessagingApi(configuration=config)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # 資料庫初始化
