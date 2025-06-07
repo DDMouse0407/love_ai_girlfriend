@@ -1,26 +1,25 @@
 import requests
-import os
 import uuid
+import os
+from dotenv import load_dotenv
 
-def upload_image_to_r2(image_bytes, filename=None):
-    if not filename:
-        filename = f"{uuid.uuid4().hex}.jpg"
+load_dotenv()
 
+def upload_image_to_r2(image_bytes: bytes) -> str:
     token = os.getenv("R2_ACCESS_TOKEN")
-    account_id = os.getenv("R2_ACCOUNT_ID")
-    bucket_name = os.getenv("R2_BUCKET_NAME")
-    public_url_base = os.getenv("R2_PUBLIC_URL")
+    bucket = os.getenv("R2_BUCKET_NAME")
+    base_url = os.getenv("R2_PUBLIC_URL")
 
-    upload_url = f"https://{account_id}.r2.cloudflarestorage.com/{bucket_name}/{filename}"
+    filename = f"{uuid.uuid4().hex}.jpg"
+    upload_url = f"https://{bucket}.r2.cloudflarestorage.com/{filename}"
 
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "image/jpeg"
     }
 
-    response = requests.put(upload_url, headers=headers, data=image_bytes)
-
-    if response.status_code in [200, 201]:
-        return f"{public_url_base}/{filename}"
+    response = requests.put(upload_url, data=image_bytes, headers=headers)
+    if response.status_code == 200:
+        return f"{base_url}/{filename}"
     else:
-        raise Exception(f"Upload failed: {response.status_code} - {response.text}")
+        raise Exception(f"R2 上傳失敗: {response.status_code} - {response.text}")
