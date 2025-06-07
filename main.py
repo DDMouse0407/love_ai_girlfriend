@@ -6,6 +6,7 @@ from linebot.v3.messaging.configuration import Configuration
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
+from gpt_chat import ask_openai
 import openai
 import os
 import sqlite3
@@ -107,17 +108,6 @@ def handle_image(event):
             ]
         )
     )
-
-def ask_openai(prompt):
-    try:
-        completion = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        return f"小熒今天有點當機了… {str(e)}"
-
 def is_over_token_quota():
     try:
         headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
