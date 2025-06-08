@@ -3,7 +3,7 @@ from linebot.v3.webhook import WebhookHandler
 from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessage, ImageMessage
 from linebot.v3.messaging.api_client import ApiClient
 from linebot.v3.messaging.configuration import Configuration
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
+from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
 from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
@@ -61,17 +61,43 @@ async def payment_callback(request: Request):
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text(event):
     user_id = event.source.user_id
-    message_text = event.message.text
+    message_text = event.message.text.strip()
 
     cursor.execute("SELECT msg_count, is_paid, free_count FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
 
     if result is None:
-        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)", (user_id, 1, 0, 2))
+        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)",
+                       (user_id, 1, 0, 2))
         conn.commit()
-        response = wrap_as_rina(ask_openai(message_text))
+        result = (1, 0, 2)
+
+    msg_count, is_paid, free_count = result
+
+    if message_text.startswith("/畫圖"):
+        prompt = message_text.replace("/畫圖", "").strip()
+        if not prompt:
+            response = "請輸入圖片主題，例如：`/畫圖 森林裡的綠髮女孩`"
+        elif is_user_whitelisted(user_id) or is_paid or free_count > 0:
+            image_bytes = generate_image_bytes(prompt)
+            image_url = upload_image_to_r2(image_bytes)
+            reply_text = f"晴子醬幫你畫好了～主題是：「{prompt}」🌿"
+            line_bot_api.reply_message_with_http_info(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[
+                        TextMessage(text=reply_text),
+                        ImageMessage(original_content_url=image_url, preview_image_url=image_url)
+                    ]
+                )
+            )
+            if not is_user_whitelisted(user_id) and not is_paid:
+                cursor.execute("UPDATE users SET free_count = free_count - 1 WHERE user_id=?", (user_id,))
+                conn.commit()
+            return
+        else:
+            response = "你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續畫圖 💖\n👉 https://p.ecpay.com.tw/97C358E"
     else:
-        msg_count, is_paid, free_count = result
         if is_user_whitelisted(user_id):
             cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
             conn.commit()
@@ -94,37 +120,6 @@ def handle_text(event):
         ReplyMessageRequest(
             reply_token=event.reply_token,
             messages=[TextMessage(text=response)]
-        )
-    )
-
-@handler.add(MessageEvent, message=ImageMessageContent)
-def handle_image(event):
-    user_id = event.source.user_id
-    cursor.execute("SELECT is_paid, free_count FROM users WHERE user_id=?", (user_id,))
-    result = cursor.fetchone()
-
-    if result:
-        is_paid, free_count = result
-        if is_user_whitelisted(user_id) or is_paid or free_count > 0:
-            prompt = "a romantic anime girl selfie in forest with green tones and deer theme"
-            image_bytes = generate_image_bytes(prompt)
-            image_url = upload_image_to_r2(image_bytes)
-            reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
-            line_bot_api.reply_message_with_http_info(
-                ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[
-                        TextMessage(text=reply_text),
-                        ImageMessage(original_content_url=image_url, preview_image_url=image_url)
-                    ]
-                )
-            )
-            return
-
-    line_bot_api.reply_message_with_http_info(
-        ReplyMessageRequest(
-            reply_token=event.reply_token,
-            messages=[TextMessage(text="你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續傳圖 💖\n👉 https://p.ecpay.com.tw/97C358E")]
         )
     )
 
