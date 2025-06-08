@@ -14,19 +14,15 @@ from image_generator import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
 
-# 載入環境變數
 load_dotenv()
 
-# 初始化 FastAPI 與 LINE Bot Handler
 app = FastAPI()
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-# 建立 LINE Messaging API 客戶端
 config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 api_client = ApiClient(configuration=config)
 line_bot_api = MessagingApi(api_client=api_client)
 
-# 初始化 SQLite 資料庫
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -71,22 +67,20 @@ def handle_text(event):
     result = cursor.fetchone()
 
     if result is None:
-        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)",
-                       (user_id, 1, 0, 2))
+        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)", (user_id, 1, 0, 2))
         conn.commit()
         response = wrap_as_rina(ask_openai(message_text))
     else:
         msg_count, is_paid, free_count = result
         if is_paid or is_user_whitelisted(user_id):
-    cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
-    conn.commit()
-    if not is_user_whitelisted(user_id) and is_over_token_quota():
-        response = "晴子醬今天嘴巴破皮不能講話了啦～我晚點再陪你好不好～🥺"
-    else:
-        response = wrap_as_rina(ask_openai(message_text))
-        if free_count > 0:
-            cursor.execute("UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id=?",
-                           (user_id,))
+            cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
+            conn.commit()
+            if not is_user_whitelisted(user_id) and is_over_token_quota():
+                response = "晴子醬今天嘴巴破皮不能講話了啦～我晚點再陪你好不好～🥺"
+            else:
+                response = wrap_as_rina(ask_openai(message_text))
+        elif free_count > 0:
+            cursor.execute("UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id=?", (user_id,))
             conn.commit()
             response = wrap_as_rina(ask_openai(message_text)) + f"\n（免費體驗剩餘次數：{free_count - 1}）"
         else:
@@ -108,7 +102,7 @@ def handle_image(event):
     if result:
         is_paid, free_count = result
         if is_paid or is_user_whitelisted(user_id) or free_count > 0:
-            prompt = "a romantic anime girl selfie"
+            prompt = "a romantic anime girl selfie in forest with green tones and deer theme"
             image_bytes = generate_image_bytes(prompt)
             image_url = upload_image_to_r2(image_bytes)
             reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
