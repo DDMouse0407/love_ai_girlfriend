@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 設定白名單，user_id 為已付費或開發者帳號
-WHITELIST_USER_IDS = {"U563b9f6cdea96af2672ac48816cdb5a7"}  # ← 你本人的 LINE userId 請改這個
+raw_ids = os.getenv("WHITELIST_USER_IDS", "")
+WHITELIST_USER_IDS = set(uid.strip() for uid in raw_ids.split(",") if uid.strip())
 
 def ask_openai(prompt: str) -> str:
     try:
@@ -18,7 +18,7 @@ def ask_openai(prompt: str) -> str:
             ]
         )
         return response.choices[0].message.content.strip()
-    except Exception as e:
+    except Exception:
         return "晴子醬今天有點累，晚點再陪你好不好～🥺"
 
 def is_over_token_quota():
