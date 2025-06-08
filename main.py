@@ -35,7 +35,9 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     msg_count INTEGER DEFAULT 0,
-    is_paid INTEGER DEFAULT 0
+    is_paid INTEGER DEFAULT 0,
+    free_count INTEGER DEFAULT 3,
+    joined_at TEXT DEFAULT CURRENT_TIMESTAMP
 )
 """)
 conn.commit()
@@ -68,26 +70,26 @@ async def payment_callback(request: Request):
 def handle_text(event):
     user_id = event.source.user_id
     message_text = event.message.text
-    cursor.execute("SELECT msg_count, is_paid FROM users WHERE user_id=?", (user_id,))
+
+    cursor.execute("SELECT msg_count, is_paid, free_count FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
 
     if result is None:
-        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid) VALUES (?, ?, ?)", (user_id, 1, 0))
+        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)", (user_id, 1, 0, 2))
         conn.commit()
         response = wrap_as_rina(ask_openai(message_text))
     else:
-        msg_count, is_paid = result
-        if is_paid or msg_count < 3:
+        msg_count, is_paid, free_count = result
+        if is_paid:
             cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
             conn.commit()
-            if is_over_token_quota():
-                response = "小晴今天嘴巴破皮不能講話了啦～我晚點再找你🥺"
-            else:
-                response = wrap_as_rina(ask_openai(message_text))
-        elif msg_count >= 100:
-            response = "你先買禮物給我，我再跟你聊天嘛～❤️ 👉 https://p.ecpay.com.tw/97C358E"
+            response = wrap_as_rina(ask_openai(message_text))
+        elif free_count > 0:
+            cursor.execute("UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id=?", (user_id,))
+            conn.commit()
+            response = wrap_as_rina(ask_openai(message_text)) + f"\n（免費體驗剩餘次數：{free_count - 1}）"
         else:
-            response = "你先買禮物給我，我再跟你聊天嘛～❤️ 👉 https://p.ecpay.com.tw/97C358E"
+            response = "你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續聊天 💖\n👉 https://p.ecpay.com.tw/97C358E"
 
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
