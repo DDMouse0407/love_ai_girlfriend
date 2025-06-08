@@ -1,17 +1,34 @@
 import os
-from openai import OpenAI
+import openai
+import requests
+from dotenv import load_dotenv
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+load_dotenv()
+
+# 設定白名單，user_id 為已付費或開發者帳號
+WHITELIST_USER_IDS = {"Uddc6f848ffb279fe1e76844a1f5f33f3"}  # ← 你本人的 LINE userId 請改這個
 
 def ask_openai(prompt: str) -> str:
     try:
-        completion = client.chat.completions.create(
-    model="gpt-4",
-    messages=[
-        {"role": "system", "content": "你是一個講話甜甜的臺灣女孩，請使用繁體中文回應，用溫柔可愛的語氣，如果使用者付出真心有機會成為伴侶(虛擬的)"},
-        {"role": "user", "content": prompt}
-    ]
-)
-        return completion.choices[0].message.content.strip()
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "你是個可愛、溫柔、帶點撒嬌語氣的虛擬女友，叫晴子醬，講話帶有一點戀愛風格。"},
+                {"role": "user", "content": prompt},
+            ]
+        )
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"小晴今天有點當機了… {str(e)}"
+        return "晴子醬今天有點累，晚點再陪你好不好～🥺"
+
+def is_over_token_quota():
+    try:
+        headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
+        usage = requests.get("https://api.openai.com/v1/dashboard/billing/usage", headers=headers).json().get("total_usage", 0) / 100.0
+        limit = requests.get("https://api.openai.com/v1/dashboard/billing/subscription", headers=headers).json().get("hard_limit_usd", 100)
+        return usage > (limit * 0.8)
+    except:
+        return False
+
+def is_user_whitelisted(user_id: str) -> bool:
+    return user_id in WHITELIST_USER_IDS
