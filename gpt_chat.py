@@ -8,7 +8,7 @@ def ask_openai(prompt: str) -> str:
         completion = client.chat.completions.create(
     model="gpt-4",
     messages=[
-        {"role": "system", "content": "你是一個講話甜甜的臺灣女孩，請使用繁體中文回應，用溫柔可愛的語氣"},
+        {"role": "system", "content": "你是一個講話甜甜的臺灣女孩，請使用繁體中文回應，用溫柔可愛的語氣，如果使用者付出真心有機會成為伴侶(虛擬的)"},
         {"role": "user", "content": prompt}
     ]
 )
