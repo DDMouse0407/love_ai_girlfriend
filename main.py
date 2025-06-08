@@ -13,7 +13,6 @@ import sqlite3
 from image_generator import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
-import requests
 
 # 載入環境變數
 load_dotenv()
@@ -27,7 +26,7 @@ config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 api_client = ApiClient(configuration=config)
 line_bot_api = MessagingApi(api_client=api_client)
 
-# 初始化 SQLite 使用者資料表
+# 初始化 SQLite 資料庫
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -35,8 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     msg_count INTEGER DEFAULT 0,
     is_paid INTEGER DEFAULT 0,
-    free_count INTEGER DEFAULT 3,
-    joined_at TEXT DEFAULT CURRENT_TIMESTAMP
+    free_count INTEGER DEFAULT 3
 )
 """)
 conn.commit()
@@ -68,11 +66,13 @@ async def payment_callback(request: Request):
 def handle_text(event):
     user_id = event.source.user_id
     message_text = event.message.text
+
     cursor.execute("SELECT msg_count, is_paid, free_count FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
 
     if result is None:
-        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)", (user_id, 1, 0, 2))
+        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)",
+                       (user_id, 1, 0, 2))
         conn.commit()
         response = wrap_as_rina(ask_openai(message_text))
     else:
@@ -80,9 +80,13 @@ def handle_text(event):
         if is_paid or is_user_whitelisted(user_id):
             cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
             conn.commit()
-            response = wrap_as_rina(ask_openai(message_text))
+            if is_over_token_quota():
+                response = "晴子醬今天嘴巴破皮不能講話了啦～我晚點再找你🥺"
+            else:
+                response = wrap_as_rina(ask_openai(message_text))
         elif free_count > 0:
-            cursor.execute("UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id=?", (user_id,))
+            cursor.execute("UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id=?",
+                           (user_id,))
             conn.commit()
             response = wrap_as_rina(ask_openai(message_text)) + f"\n（免費體驗剩餘次數：{free_count - 1}）"
         else:
@@ -100,6 +104,7 @@ def handle_image(event):
     user_id = event.source.user_id
     cursor.execute("SELECT is_paid, free_count FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
+
     if result:
         is_paid, free_count = result
         if is_paid or is_user_whitelisted(user_id) or free_count > 0:
@@ -121,7 +126,7 @@ def handle_image(event):
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
             reply_token=event.reply_token,
-            messages=[TextMessage(text="你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續傳圖片 💖\n👉 https://p.ecpay.com.tw/97C358E")]
+            messages=[TextMessage(text="你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續傳圖 💖\n👉 https://p.ecpay.com.tw/97C358E")]
         )
     )
 
