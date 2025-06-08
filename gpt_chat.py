@@ -5,8 +5,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 支援從環境變數讀取白名單 ID
-WHITELIST_USER_IDS = set(os.getenv("WHITELIST_USER_IDS", "").split(","))
+# 安全載入白名單（過濾空字串）
+WHITELIST_USER_IDS = set(filter(None, os.getenv("WHITELIST_USER_IDS", "").split(",")))
+print(f"💡 白名單 ID：{WHITELIST_USER_IDS}")
 
 def ask_openai(prompt: str) -> str:
     try:
