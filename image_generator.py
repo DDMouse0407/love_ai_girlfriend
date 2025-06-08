@@ -8,25 +8,18 @@ HF_API_KEY = os.getenv("HF_API_KEY")
 def generate_image_bytes(prompt: str) -> bytes:
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     payload = {"inputs": prompt}
+    url = "https://api-inference.huggingface.co/models/SG161222/Realistic_Vision_V5.1_noVAE"
 
     print(f"[DEBUG] 發送提示詞：{prompt}")
     
     try:
-        response = requests.post(
-            "https://api-inference.huggingface.co/models/SG161222/Realistic_Vision_V3.0_VAE",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
-
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
         if response.status_code == 200:
-            print("[DEBUG] 圖片生成成功")
             return response.content
         else:
             print(f"[ERROR] API 回傳錯誤，狀態碼：{response.status_code}")
             print(f"[ERROR] 回傳內容：{response.text}")
             raise Exception("圖片生成失敗，請稍後再試")
-
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] 圖片生成時發生例外：{e}")
         raise Exception("無法與 Hugging Face API 連線")
