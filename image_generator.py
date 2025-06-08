@@ -19,7 +19,6 @@ def generate_image_bytes(prompt: str) -> bytes:
     json=payload,
     timeout=60
 )
-        )
 
         if response.status_code == 200:
             return response.content
