@@ -84,7 +84,7 @@ def handle_text(event):
         response = "晴子醬今天嘴巴破皮不能講話了啦～我晚點再陪你好不好～🥺"
     else:
         response = wrap_as_rina(ask_openai(message_text))
-        elif free_count > 0:
+        if free_count > 0:
             cursor.execute("UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id=?",
                            (user_id,))
             conn.commit()
