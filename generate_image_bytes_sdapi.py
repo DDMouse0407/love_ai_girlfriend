@@ -7,20 +7,21 @@ load_dotenv()
 API_KEY = os.getenv("SD_API_KEY")
 
 def generate_image_bytes(prompt: str) -> bytes:
-    url = "https://stablediffusionapi.com/api/v3/text2img"
-    payload = {
-        "key": API_KEY,
-        "prompt": prompt,
-        "negative_prompt": "",
-        "width": "512",
-        "height": "768",
-        "samples": "1",
-        "num_inference_steps": "20",
-        "guidance_scale": 7.5,
-        "safety_checker": "no",
-        "webhook": None,
-        "seed": None
-    }
+    url = "https://stablediffusionapi.com/api/v4/dreambooth"
+payload = {
+    "key": os.getenv("SD_API_KEY"),
+    "model_id": "anything-v5",
+    "prompt": prompt,
+    "negative_prompt": "blurry, ugly, disfigured",
+    "width": "512",
+    "height": "768",
+    "samples": "1",
+    "num_inference_steps": "30",
+    "seed": None,
+    "guidance_scale": 7.5,
+    "webhook": None,
+    "track_id": None
+}
 
     try:
         response = requests.post(url, json=payload)
