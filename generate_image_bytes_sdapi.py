@@ -1,36 +1,37 @@
-import os
 import requests
-from io import BytesIO
-from PIL import Image
+import os
 
 def generate_image_bytes(prompt: str) -> bytes:
     url = "https://stablediffusionapi.com/api/v4/dreambooth"
-    api_key = os.getenv("SD_API_KEY")
-    
-    payload = {
-        "key": api_key,
-        "model_id": "midjourney",  # 可改成 realistic-vision 或其他
-        "prompt": prompt,
-        "negative_prompt": "",
-        "width": "512",
-        "height": "512",
-        "samples": "1",
-        "num_inference_steps": "30",
-        "guidance_scale": 7.5,
-        "seed": None,
-        "webhook": None,
-        "track_id": None
-    }
 
     headers = {
         "Content-Type": "application/json"
     }
 
-    response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()
+    payload = {
+        "key": os.getenv("SD_API_KEY"),
+        "model_id": "dreamshaper-8-lcm",
+        "prompt": prompt,
+        "negative_prompt": "blurry, distorted, low quality",
+        "width": "512",
+        "height": "768",
+        "samples": "1",
+        "num_inference_steps": "20",
+        "guidance_scale": 7.5,
+    }
 
-    output_url = response.json()["output"][0]
-    image_response = requests.get(output_url)
-    image_response.raise_for_status()
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
 
-    return image_response.content
+        if data["status"] == "success" and data.get("output"):
+            image_url = data["output"][0]
+            img_resp = requests.get(image_url)
+            img_resp.raise_for_status()
+            return img_resp.content
+        else:
+            raise RuntimeError(f"圖片生成失敗：{data}")
+
+    except Exception as e:
+        raise RuntimeError(f"圖片生成失敗：{e}")
