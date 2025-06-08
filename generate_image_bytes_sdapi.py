@@ -1,33 +1,36 @@
 import os
 import requests
 from io import BytesIO
+from PIL import Image
 
 def generate_image_bytes(prompt: str) -> bytes:
+    url = "https://stablediffusionapi.com/api/v4/dreambooth"
     api_key = os.getenv("SD_API_KEY")
-
+    
     payload = {
         "key": api_key,
+        "model_id": "midjourney",  # 可改成 realistic-vision 或其他
         "prompt": prompt,
-        "negative_prompt": None,
+        "negative_prompt": "",
         "width": "512",
         "height": "512",
         "samples": "1",
         "num_inference_steps": "30",
         "guidance_scale": 7.5,
+        "seed": None,
         "webhook": None,
         "track_id": None
     }
 
-    response = requests.post(
-        "https://stablediffusionapi.com/api/v3/text2img", 
-        json=payload
-    )
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
     response.raise_for_status()
 
-    result = response.json()
-    if not result.get("output"):
-        raise RuntimeError("API 沒有回傳圖片網址")
+    output_url = response.json()["output"][0]
+    image_response = requests.get(output_url)
+    image_response.raise_for_status()
 
-    image_url = result["output"][0]
-    image_response = requests.get(image_url)
-    return BytesIO(image_response.content).getvalue()
+    return image_response.content
