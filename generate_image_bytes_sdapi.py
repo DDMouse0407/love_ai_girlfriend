@@ -1,29 +1,33 @@
 import os
 import requests
+from io import BytesIO
 
 def generate_image_bytes(prompt: str) -> bytes:
-    url = "https://stablediffusionapi.com/api/v4/dreambooth"
+    api_key = os.getenv("SD_API_KEY")
 
     payload = {
-        "key": os.getenv("SD_API_KEY"),
-        "model_id": "anything-v5",
+        "key": api_key,
         "prompt": prompt,
-        "negative_prompt": "blurry, ugly, disfigured",
+        "negative_prompt": None,
         "width": "512",
-        "height": "768",
+        "height": "512",
         "samples": "1",
         "num_inference_steps": "30",
-        "seed": None,
         "guidance_scale": 7.5,
         "webhook": None,
         "track_id": None
     }
 
-    try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()
-        image_url = response.json()["output"][0]
-        image_response = requests.get(image_url)
-        return image_response.content
-    except Exception as e:
-        raise RuntimeError(f"圖片生成失敗: {e}")
+    response = requests.post(
+        "https://stablediffusionapi.com/api/v3/text2img", 
+        json=payload
+    )
+    response.raise_for_status()
+
+    result = response.json()
+    if not result.get("output"):
+        raise RuntimeError("API 沒有回傳圖片網址")
+
+    image_url = result["output"][0]
+    image_response = requests.get(image_url)
+    return BytesIO(image_response.content).getvalue()
