@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-raw_ids = os.getenv("WHITELIST_USER_IDS", "")
-WHITELIST_USER_IDS = set(uid.strip() for uid in raw_ids.split(",") if uid.strip())
+# 支援從環境變數讀取白名單 ID
+WHITELIST_USER_IDS = set(os.getenv("WHITELIST_USER_IDS", "").split(","))
 
 def ask_openai(prompt: str) -> str:
     try:
@@ -21,6 +21,9 @@ def ask_openai(prompt: str) -> str:
     except Exception:
         return "晴子醬今天有點累，晚點再陪你好不好～🥺"
 
+def is_user_whitelisted(user_id: str) -> bool:
+    return user_id in WHITELIST_USER_IDS
+
 def is_over_token_quota():
     try:
         headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
@@ -29,6 +32,3 @@ def is_over_token_quota():
         return usage > (limit * 0.8)
     except:
         return False
-
-def is_user_whitelisted(user_id: str) -> bool:
-    return user_id in WHITELIST_USER_IDS
