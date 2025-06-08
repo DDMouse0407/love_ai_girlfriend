@@ -14,6 +14,7 @@ from image_generator import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
 
+# 載入環境變數
 load_dotenv()
 
 app = FastAPI()
@@ -23,6 +24,7 @@ config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 api_client = ApiClient(configuration=config)
 line_bot_api = MessagingApi(api_client=api_client)
 
+# 初始化 SQLite
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -72,10 +74,15 @@ def handle_text(event):
         response = wrap_as_rina(ask_openai(message_text))
     else:
         msg_count, is_paid, free_count = result
-        if is_paid or is_user_whitelisted(user_id):
+        if is_user_whitelisted(user_id):
+            print(f"[白名單] {user_id} 無限制使用")
             cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
             conn.commit()
-            if not is_user_whitelisted(user_id) and is_over_token_quota():
+            response = wrap_as_rina(ask_openai(message_text)) + "\n（開發者白名單無限制）"
+        elif is_paid:
+            cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
+            conn.commit()
+            if is_over_token_quota():
                 response = "晴子醬今天嘴巴破皮不能講話了啦～我晚點再陪你好不好～🥺"
             else:
                 response = wrap_as_rina(ask_openai(message_text))
@@ -101,7 +108,7 @@ def handle_image(event):
 
     if result:
         is_paid, free_count = result
-        if is_paid or is_user_whitelisted(user_id) or free_count > 0:
+        if is_user_whitelisted(user_id) or is_paid or free_count > 0:
             prompt = "a romantic anime girl selfie in forest with green tones and deer theme"
             image_bytes = generate_image_bytes(prompt)
             image_url = upload_image_to_r2(image_bytes)
@@ -123,4 +130,6 @@ def handle_image(event):
             messages=[TextMessage(text="你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續傳圖 💖\n👉 https://p.ecpay.com.tw/97C358E")]
         )
     )
+
+if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
