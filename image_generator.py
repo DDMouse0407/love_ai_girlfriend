@@ -5,7 +5,7 @@ load_dotenv()
 API_KEY = os.getenv("SD_API_KEY")
 
 def generate_image_bytes_sdapi(prompt: str) -> bytes:
-    url = "https://api.stablediffusionapi.com/v3/text2img"  # 以實際 API Endpoint 為準
+    url = "https://stablediffusionapi.com/api/v3/text2img"  # 以實際 API Endpoint 為準
     headers = {"Authorization": f"Bearer {API_KEY}"}
     payload = {"prompt": prompt}
     resp = requests.post(url, json=payload, timeout=60)
