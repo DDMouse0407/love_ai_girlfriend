@@ -6,25 +6,28 @@ from linebot.v3.messaging.configuration import Configuration
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
-from gpt_chat import ask_openai
+from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
 import uvicorn
-import openai
 import os
 import sqlite3
-import requests
 from image_generator import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
+import requests
 
+# 載入環境變數
 load_dotenv()
 
+# 初始化 FastAPI 與 LINE Bot Handler
 app = FastAPI()
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
+# 建立 LINE Messaging API 客戶端
 config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 api_client = ApiClient(configuration=config)
 line_bot_api = MessagingApi(api_client=api_client)
 
+# 初始化 SQLite 使用者資料表
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -65,7 +68,6 @@ async def payment_callback(request: Request):
 def handle_text(event):
     user_id = event.source.user_id
     message_text = event.message.text
-
     cursor.execute("SELECT msg_count, is_paid, free_count FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
 
@@ -75,16 +77,16 @@ def handle_text(event):
         response = wrap_as_rina(ask_openai(message_text))
     else:
         msg_count, is_paid, free_count = result
-        if is_paid:
+        if is_paid or is_user_whitelisted(user_id):
             cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
             conn.commit()
             response = wrap_as_rina(ask_openai(message_text))
         elif free_count > 0:
             cursor.execute("UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id=?", (user_id,))
             conn.commit()
-            response = wrap_as_rina(ask_openai(message_text)) + f"\nï¼åè²»é«é©å©é¤æ¬¡æ¸ï¼{free_count - 1}ï¼"
+            response = wrap_as_rina(ask_openai(message_text)) + f"\n（免費體驗剩餘次數：{free_count - 1}）"
         else:
-            response = "ä½ å·²ç¶ç¨å®åè²»é«é©æ¬¡æ¸å ð¥º\nè«è³¼è²·æ´å­é¬æææ¹æ¡æè½ç¹¼çºèå¤© ð\nð https://p.ecpay.com.tw/97C358E"
+            response = "你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續聊天 💖\n👉 https://p.ecpay.com.tw/97C358E"
 
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
@@ -100,11 +102,11 @@ def handle_image(event):
     result = cursor.fetchone()
     if result:
         is_paid, free_count = result
-        if is_paid or free_count > 0:
+        if is_paid or is_user_whitelisted(user_id) or free_count > 0:
             prompt = "a romantic anime girl selfie"
             image_bytes = generate_image_bytes(prompt)
             image_url = upload_image_to_r2(image_bytes)
-            reply_text = "åï½ä½ çµ¦æçéåæ¯ä»éº¼ææåï½æèç´äºå¦///"
+            reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
             line_bot_api.reply_message_with_http_info(
                 ReplyMessageRequest(
                     reply_token=event.reply_token,
@@ -119,18 +121,9 @@ def handle_image(event):
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
             reply_token=event.reply_token,
-            messages=[TextMessage(text="ä½ å·²ç¶ç¨å®åè²»é«é©æ¬¡æ¸å ð¥º\nè«è³¼è²·æ´å­é¬æææ¹æ¡æè½ç¹¼çºå³åç ð\nð https://p.ecpay.com.tw/97C358E")]
+            messages=[TextMessage(text="你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續傳圖片 💖\n👉 https://p.ecpay.com.tw/97C358E")]
         )
     )
-
-def is_over_token_quota():
-    try:
-        headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
-        usage = requests.get("https://api.openai.com/v1/dashboard/billing/usage", headers=headers).json().get("total_usage", 0) / 100.0
-        limit = requests.get("https://api.openai.com/v1/dashboard/billing/subscription", headers=headers).json().get("hard_limit_usd", 100)
-        return usage > (limit * 0.8)
-    except:
-        return False
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
