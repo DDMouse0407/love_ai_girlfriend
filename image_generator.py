@@ -1,29 +1,15 @@
-import os
-import requests
+import os, requests
 from dotenv import load_dotenv
 
 load_dotenv()
-HF_API_KEY = os.getenv("HF_API_KEY")
+API_KEY = os.getenv("SD_API_KEY")
 
-def generate_image_bytes(prompt: str) -> bytes:
-    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-    payload = {"inputs": prompt}
-
-    print(f"[DEBUG] 發送提示詞：{prompt}")
-
-    try:
-        response = requests.post(
-            "https://api-inference.huggingface.co/models/SG161222/Realistic_Vision_V5.1_noVAE",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
-        if response.status_code == 200:
-            return response.content
-        else:
-            print(f"[ERROR] API 回傳錯誤，狀態碼：{response.status_code}")
-            print(f"[ERROR] 回傳內容：{response.text}")
-            raise Exception("圖片生成失敗，請稍後再試")
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] 圖片生成時發生例外：{e}")
-        raise Exception("無法與 Hugging Face API 連線")
+def generate_image_bytes_sdapi(prompt: str) -> bytes:
+    url = "https://api.stablediffusionapi.com/v3/text2img"  # 以實際 API Endpoint 為準
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+    payload = {"prompt": prompt}
+    resp = requests.post(url, json=payload, timeout=60)
+    resp.raise_for_status()
+    data = resp.json()
+    img_url = data["image"]  # 回傳含 image 欄位
+    return requests.get(img_url).content
