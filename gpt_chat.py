@@ -11,6 +11,7 @@ print(f"💡 白名單 ID：{WHITELIST_USER_IDS}")
 
 def ask_openai(prompt: str) -> str:
     try:
+        print(f"[DEBUG] 向 OpenAI 發送訊息：{prompt}")
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
@@ -18,8 +19,10 @@ def ask_openai(prompt: str) -> str:
                 {"role": "user", "content": prompt},
             ]
         )
+        print("[DEBUG] 回覆成功")
         return response.choices[0].message.content.strip()
-    except Exception:
+    except Exception as e:
+        print(f"[ERROR] ChatGPT 失敗：{e}")
         return "晴子醬今天有點累，晚點再陪你好不好～🥺"
 
 def is_user_whitelisted(user_id: str) -> bool:
