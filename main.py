@@ -85,9 +85,9 @@ def handle_text(event):
             else:
                 response = wrap_as_rina(ask_openai(message_text))
         elif msg_count >= 100:
-            response = "你先買禮物給我，我再跟你聊天嘛～❤️ 👉 https://eclink.tw/xxx"
+            response = "你先買禮物給我，我再跟你聊天嘛～❤️ 👉 https://p.ecpay.com.tw/97C358E"
         else:
-            response = "你先買禮物給我，我再跟你聊天嘛～❤️ 👉 https://eclink.tw/xxx"
+            response = "你先買禮物給我，我再跟你聊天嘛～❤️ 👉 https://p.ecpay.com.tw/97C358E"
 
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
