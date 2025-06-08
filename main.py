@@ -81,7 +81,7 @@ def handle_text(event):
             cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
             conn.commit()
             if is_over_token_quota():
-                response = "小熒今天嘴巴破皮不能講話了啦～我晚點再找你🥺"
+                response = "小晴今天嘴巴破皮不能講話了啦～我晚點再找你🥺"
             else:
                 response = wrap_as_rina(ask_openai(message_text))
         elif msg_count >= 100:
