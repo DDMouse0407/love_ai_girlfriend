@@ -17,7 +17,7 @@ def generate_image_bytes(prompt: str) -> bytes:
 
     try:
         response = requests.post(
-            "https://api-inference.huggingface.co/models/CompVis/stable-diffusion-v1-4",
+            "https://api-inference.huggingface.co/models/gsdf/Counterfeit-V2.5",
             headers=headers,
             json=payload,
             timeout=60
