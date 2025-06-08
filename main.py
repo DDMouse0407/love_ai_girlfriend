@@ -16,19 +16,15 @@ from image_generator import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
 
-# 載入環境變數
 load_dotenv()
 
-# 初始化 FastAPI 與 LINE Bot Handler
 app = FastAPI()
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-# 建立 LINE Messaging API 客戶端
 config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 api_client = ApiClient(configuration=config)
 line_bot_api = MessagingApi(api_client=api_client)
 
-# 初始化 SQLite 使用者資料表
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -42,7 +38,6 @@ CREATE TABLE IF NOT EXISTS users (
 """)
 conn.commit()
 
-# ✅ 加入 webhook GET 驗證路徑
 @app.get("/callback")
 async def verify_webhook():
     return "OK"
@@ -87,9 +82,9 @@ def handle_text(event):
         elif free_count > 0:
             cursor.execute("UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id=?", (user_id,))
             conn.commit()
-            response = wrap_as_rina(ask_openai(message_text)) + f"\n（免費體驗剩餘次數：{free_count - 1}）"
+            response = wrap_as_rina(ask_openai(message_text)) + f"\nï¼åè²»é«é©å©é¤æ¬¡æ¸ï¼{free_count - 1}ï¼"
         else:
-            response = "你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續聊天 💖\n👉 https://p.ecpay.com.tw/97C358E"
+            response = "ä½ å·²ç¶ç¨å®åè²»é«é©æ¬¡æ¸å ð¥º\nè«è³¼è²·æ´å­é¬æææ¹æ¡æè½ç¹¼çºèå¤© ð\nð https://p.ecpay.com.tw/97C358E"
 
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
@@ -100,17 +95,31 @@ def handle_text(event):
 
 @handler.add(MessageEvent, message=ImageMessageContent)
 def handle_image(event):
-    prompt = "a romantic anime girl selfie"
-    image_bytes = generate_image_bytes(prompt)
-    image_url = upload_image_to_r2(image_bytes)
-    reply_text = "哇～你給我看這個是什麼意思呀～我臉紅了啦///"
+    user_id = event.source.user_id
+    cursor.execute("SELECT is_paid, free_count FROM users WHERE user_id=?", (user_id,))
+    result = cursor.fetchone()
+    if result:
+        is_paid, free_count = result
+        if is_paid or free_count > 0:
+            prompt = "a romantic anime girl selfie"
+            image_bytes = generate_image_bytes(prompt)
+            image_url = upload_image_to_r2(image_bytes)
+            reply_text = "åï½ä½ çµ¦æçéåæ¯ä»éº¼ææåï½æèç´äºå¦///"
+            line_bot_api.reply_message_with_http_info(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[
+                        TextMessage(text=reply_text),
+                        ImageMessage(original_content_url=image_url, preview_image_url=image_url)
+                    ]
+                )
+            )
+            return
+
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
             reply_token=event.reply_token,
-            messages=[
-                TextMessage(text=reply_text),
-                ImageMessage(original_content_url=image_url, preview_image_url=image_url)
-            ]
+            messages=[TextMessage(text="ä½ å·²ç¶ç¨å®åè²»é«é©æ¬¡æ¸å ð¥º\nè«è³¼è²·æ´å­é¬æææ¹æ¡æè½ç¹¼çºå³åç ð\nð https://p.ecpay.com.tw/97C358E")]
         )
     )
 
