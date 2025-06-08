@@ -14,7 +14,6 @@ from image_generator import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
 
-# 載入環境變數
 load_dotenv()
 
 app = FastAPI()
@@ -24,7 +23,6 @@ config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 api_client = ApiClient(configuration=config)
 line_bot_api = MessagingApi(api_client=api_client)
 
-# 初始化 SQLite
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -75,7 +73,6 @@ def handle_text(event):
     else:
         msg_count, is_paid, free_count = result
         if is_user_whitelisted(user_id):
-            print(f"[白名單] {user_id} 無限制使用")
             cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
             conn.commit()
             response = wrap_as_rina(ask_openai(message_text)) + "\n（開發者白名單無限制）"
