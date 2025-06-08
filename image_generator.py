@@ -6,7 +6,7 @@ load_dotenv()
 HF_API_KEY = os.getenv("HF_API_KEY")
 
 def generate_image_bytes(prompt: str) -> bytes:
-    url = "https://api-inference.huggingface.co/models/gsdf/Counterfeit-V2.5"
+    url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     payload = {"inputs": prompt}
 
