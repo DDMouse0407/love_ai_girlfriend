@@ -1,16 +1,22 @@
+import os
 import requests
 
-HUGGING_FACE_SPACE_API = "https://moneymm258.hf.space/api/predict"
+HF_API_KEY = os.getenv("HF_API_KEY")
 
 def generate_image_bytes(prompt: str) -> bytes:
-    payload = {"data": [prompt]}
-    response = requests.post(HUGGING_FACE_SPACE_API, json=payload)
-    result = response.json()
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    payload = {"inputs": prompt}
+    
+    print(f"[DEBUG] 發送提示詞：{prompt}")
+    response = requests.post(
+        "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2",
+        headers=headers,
+        json=payload
+    )
+    
+    if response.status_code != 200:
+        print(f"[ERROR] API 回傳錯誤，狀態碼：{response.status_code}")
+        print(f"[ERROR] 回傳內容：{response.text}")
+        raise Exception("圖片生成失敗，請稍後再試")
 
-    # 檢查回傳格式是否正確
-    if "data" not in result or not result["data"]:
-        raise Exception("Hugging Face Spaces API 回傳格式錯誤")
-
-    image_url = result["data"][0]
-    img_response = requests.get(image_url)
-    return img_response.content
+    return response.content
