@@ -123,6 +123,4 @@ def handle_image(event):
             messages=[TextMessage(text="你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續傳圖 💖\n👉 https://p.ecpay.com.tw/97C358E")]
         )
     )
-
-if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
