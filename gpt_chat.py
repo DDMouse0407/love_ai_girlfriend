@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 設定白名單，user_id 為已付費或開發者帳號
-WHITELIST_USER_IDS = {"Uddc6f848ffb279fe1e76844a1f5f33f3"}  # ← 你本人的 LINE userId 請改這個
+WHITELIST_USER_IDS = {"U563b9f6cdea96af2672ac48816cdb5a7"}  # ← 你本人的 LINE userId 請改這個
 
 def ask_openai(prompt: str) -> str:
     try:
