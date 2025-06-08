@@ -14,11 +14,11 @@ def generate_image_bytes(prompt: str) -> bytes:
     
     try:
         response = requests.post(
-    "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",
-    headers=headers,
-    json=payload,
-    timeout=60
-)
+            "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",  # ✅ 修正網址
+            headers=headers,
+            json=payload,
+            timeout=60  # 避免請求掛住
+        )
 
         if response.status_code == 200:
             return response.content
