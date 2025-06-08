@@ -1,37 +1,32 @@
-import requests
-import os
+import os, requests
+from io import BytesIO
+from PIL import Image
+
+API_URL = "https://stablediffusionapi.com/api/v1/enterprise/text2img"
+API_KEY = os.getenv("SD_API_KEY")
 
 def generate_image_bytes(prompt: str) -> bytes:
-    url = "https://stablediffusionapi.com/api/v4/dreambooth"
-
-    headers = {
-        "Content-Type": "application/json"
-    }
-
     payload = {
-        "key": os.getenv("SD_API_KEY"),
-        "model_id": "dreamshaper-8-lcm",
+        "key": API_KEY,
+        "model_id": "runwayml/stable-diffusion-v1-5",  # 必填
         "prompt": prompt,
-        "negative_prompt": "blurry, distorted, low quality",
-        "width": "512",
-        "height": "768",
-        "samples": "1",
-        "num_inference_steps": "20",
+        "width": 512,
+        "height": 512,
+        "samples": 1,
+        "num_inference_steps": 30,
         "guidance_scale": 7.5,
+        "multi_lingual": "yes",
+        "panorama": "no",
+        "self_attention": "yes",
+        "upscale": "no"
     }
-
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-
-        if data["status"] == "success" and data.get("output"):
-            image_url = data["output"][0]
-            img_resp = requests.get(image_url)
-            img_resp.raise_for_status()
-            return img_resp.content
-        else:
-            raise RuntimeError(f"圖片生成失敗：{data}")
-
-    except Exception as e:
-        raise RuntimeError(f"圖片生成失敗：{e}")
+    headers = {"Content-Type": "application/json"}
+    resp = requests.post(API_URL, json=payload, headers=headers)
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("status") != "success":
+        raise RuntimeError(f"API failed: {data}")
+    img_url = data["output"][0]  # 获取 image URL
+    img_resp = requests.get(img_url)
+    img_resp.raise_for_status()
+    return img_resp.content
