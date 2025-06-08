@@ -2,7 +2,7 @@ import os, requests
 from io import BytesIO
 from PIL import Image
 
-API_URL = "https://stablediffusionapi.com/api/v1/enterprise/text2img"
+API_URL = "https://stablediffusionapi.com/api/v3/images/generate"
 API_KEY = os.getenv("SD_API_KEY")
 
 def generate_image_bytes(prompt: str) -> bytes:
