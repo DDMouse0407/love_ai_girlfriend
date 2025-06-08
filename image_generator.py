@@ -8,12 +8,16 @@ HF_API_KEY = os.getenv("HF_API_KEY")
 def generate_image_bytes(prompt: str) -> bytes:
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     payload = {"inputs": prompt}
-    url = "https://api-inference.huggingface.co/models/SG161222/Realistic_Vision_V5.1_noVAE"
 
     print(f"[DEBUG] 發送提示詞：{prompt}")
-    
+
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response = requests.post(
+            "https://api-inference.huggingface.co/models/SG161222/Realistic_Vision_V5.1_noVAE",
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
         if response.status_code == 200:
             return response.content
         else:
