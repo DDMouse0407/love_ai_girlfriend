@@ -10,7 +10,7 @@ from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
 import uvicorn
 import os
 import sqlite3
-from generate_image_bytes_playground import generate_image_bytes
+from image_generator import generate_image_bytes_sdapi as generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
 
