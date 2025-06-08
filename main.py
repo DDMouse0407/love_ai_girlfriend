@@ -78,12 +78,12 @@ def handle_text(event):
     else:
         msg_count, is_paid, free_count = result
         if is_paid or is_user_whitelisted(user_id):
-            cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
-            conn.commit()
-            if is_over_token_quota():
-                response = "晴子醬今天嘴巴破皮不能講話了啦～我晚點再找你🥺"
-            else:
-                response = wrap_as_rina(ask_openai(message_text))
+    cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
+    conn.commit()
+    if not is_user_whitelisted(user_id) and is_over_token_quota():
+        response = "晴子醬今天嘴巴破皮不能講話了啦～我晚點再陪你好不好～🥺"
+    else:
+        response = wrap_as_rina(ask_openai(message_text))
         elif free_count > 0:
             cursor.execute("UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id=?",
                            (user_id,))
