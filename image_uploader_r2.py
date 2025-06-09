@@ -4,11 +4,11 @@ import boto3
 from botocore.client import Config
 
 def upload_image_to_r2(image_bytes):
-    access_key = os.getenv("R2_ACCESS_KEY_ID")
+    access_key = os.getenv("R2_ACCESS_TOKEN")
     secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
     endpoint = os.getenv("R2_ENDPOINT")  # ✅ 用戶提供的 Cloudflare S3 Endpoint
     bucket = os.getenv("R2_BUCKET_NAME")
-    public_base = os.getenv("R2_PUBLIC_BASE_URL")
+    public_base = os.getenv("R2_PUBLIC_URL")
 
     # 檢查環境變數是否完整
     if not all([access_key, secret_key, endpoint, bucket, public_base]):
