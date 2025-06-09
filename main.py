@@ -10,7 +10,7 @@ from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
 import uvicorn
 import os
 import sqlite3
-from datetime import datetime, timedelta
+import datetime
 from generate_image_bytes import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
     msg_count INTEGER DEFAULT 0,
     is_paid INTEGER DEFAULT 0,
     free_count INTEGER DEFAULT 3,
-    paid_until TEXT
+    paid_until TEXT DEFAULT NULL
 )
 """)
 conn.commit()
@@ -56,41 +56,24 @@ async def payment_callback(request: Request):
     data = await request.json()
     user_id = data.get("userId")
     amount = int(data.get("amount", 0))
+    days = {30: 30, 90: 90, 149: 180, 199: 365}.get(amount, 0)
 
-    price_to_days = {
-        50: 1,
-        100: 3,
-        150: 5,
-        200: 7,
-        300: 14,
-        500: 30,
-        800: 60
-    }
-
-    days = price_to_days.get(amount)
-    if not days:
-        return {"status": "ignored", "reason": "金額不符任何方案"}
-
-    cursor.execute("SELECT paid_until FROM users WHERE user_id=?", (user_id,))
-    result = cursor.fetchone()
-
-    now = datetime.now()
-    if result and result[0]:
-        current_expiry = datetime.fromisoformat(result[0])
-        new_expiry = max(current_expiry, now) + timedelta(days=days)
-    else:
-        new_expiry = now + timedelta(days=days)
-
-    cursor.execute("""
-        INSERT INTO users (user_id, is_paid, paid_until)
-        VALUES (?, 1, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-            is_paid=1,
-            paid_until=excluded.paid_until
-    """, (user_id, new_expiry.isoformat()))
-    conn.commit()
-
-    return {"status": "success", "paid_until": new_expiry.isoformat()}
+    if user_id and days:
+        cursor.execute("SELECT paid_until FROM users WHERE user_id=?", (user_id,))
+        result = cursor.fetchone()
+        now = datetime.datetime.now()
+        if result and result[0]:
+            current_expire = datetime.datetime.strptime(result[0], "%Y-%m-%d")
+            new_expire = max(now, current_expire) + datetime.timedelta(days=days)
+        else:
+            new_expire = now + datetime.timedelta(days=days)
+        cursor.execute("""
+            INSERT OR REPLACE INTO users (user_id, is_paid, paid_until, msg_count, free_count)
+            VALUES (?, 1, ?, COALESCE((SELECT msg_count FROM users WHERE user_id=?), 0), COALESCE((SELECT free_count FROM users WHERE user_id=?), 0))
+        """, (user_id, new_expire.strftime("%Y-%m-%d"), user_id, user_id))
+        conn.commit()
+        return {"status": "paid", "expire_at": new_expire.strftime("%Y-%m-%d")}
+    return {"status": "failed"}
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text(event):
@@ -101,21 +84,41 @@ def handle_text(event):
     result = cursor.fetchone()
 
     if result is None:
-        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count, paid_until) VALUES (?, ?, ?, ?, ?)",
-                       (user_id, 1, 0, 2, None))
+        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)",
+                       (user_id, 1, 0, 2))
         conn.commit()
         result = (1, 0, 2, None)
 
     msg_count, is_paid, free_count, paid_until = result
 
-    # 檢查會員是否過期
+    # 判斷會員是否過期
     if paid_until:
-        if datetime.fromisoformat(paid_until) < datetime.now():
+        today = datetime.datetime.today().date()
+        if datetime.datetime.strptime(paid_until, "%Y-%m-%d").date() >= today:
+            is_paid = 1
+        else:
             is_paid = 0
-            cursor.execute("UPDATE users SET is_paid = 0 WHERE user_id=?", (user_id,))
-            conn.commit()
 
-    if message_text.startswith("/畫圖"):
+    # 🧾 `/購買` 指令：產生專屬付款連結
+    if message_text == "/購買":
+        link = f"https://p.ecpay.com.tw/97C358E?customField={user_id}"
+        response = f"點選以下連結進行付款開通晴子醬戀愛服務 💖\n🔗 {link}"
+    
+    # 🔍 `/狀態查詢` 指令：顯示剩餘天數
+    elif message_text == "/狀態查詢":
+        if paid_until:
+            days_left = (datetime.datetime.strptime(paid_until, "%Y-%m-%d").date() - datetime.date.today()).days
+            response = f"你的會員剩餘 {days_left} 天，到期日為 {paid_until} 💎"
+        else:
+            response = "你目前尚未開通會員喔 🥺 請輸入 `/購買` 開通晴子醬戀愛服務 💖"
+    
+    # 💡 `/幫我續費` 指令：再次提供付款連結
+    elif message_text == "/幫我續費":
+        link = f"https://p.ecpay.com.tw/97C358E?customField={user_id}"
+        response = f"點我立即續費晴子醬會員 💖\n🔗 {link}"
+
+    # 🎨 `/畫圖` 指令：圖像生成功能
+    elif message_text.startswith("/畫圖"):
         prompt = message_text.replace("/畫圖", "").strip()
         if not prompt:
             response = "請輸入圖片主題，例如：`/畫圖 森林裡的綠髮女孩`"
@@ -146,7 +149,9 @@ def handle_text(event):
                 print(f"[ERROR] 處理 /畫圖 指令時發生錯誤：{e}")
                 response = "晴子醬畫畫的時候不小心迷路了...請稍後再試一次 🥺"
         else:
-            response = "你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續畫圖 💖\n👉 https://p.ecpay.com.tw/97C358E"
+            response = "你已經用完免費體驗次數囉 🥺\n請輸入 `/購買` 開通晴子醬戀愛方案 💖"
+
+    # 💬 文字聊天處理
     else:
         if is_user_whitelisted(user_id):
             cursor.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id=?", (user_id,))
@@ -164,7 +169,7 @@ def handle_text(event):
             conn.commit()
             response = wrap_as_rina(ask_openai(message_text)) + f"\n（免費體驗剩餘次數：{free_count - 1}）"
         else:
-            response = "你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續聊天 💖\n👉 https://p.ecpay.com.tw/97C358E"
+            response = "你已經用完免費體驗次數囉 🥺\n請輸入 `/購買` 開通晴子醬戀愛方案 💖"
 
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
