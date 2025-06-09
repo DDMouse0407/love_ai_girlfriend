@@ -9,7 +9,7 @@ def upload_image_to_r2(image_bytes: bytes) -> str:
     token = os.getenv("R2_ACCESS_TOKEN")
     account_id = os.getenv("R2_ACCOUNT_ID")
     bucket = os.getenv("R2_BUCKET_NAME")
-    base_url = os.getenv("R2_PUBLIC_URL")
+    base_url = os.getenv("R2_PUBLIC_BASE_URL")
 
     filename = f"{uuid.uuid4().hex}.jpg"
     upload_url = f"{os.getenv('R2_UPLOAD_URL_BASE')}/{bucket}/{image_name}"
