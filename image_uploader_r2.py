@@ -12,7 +12,7 @@ def upload_image_to_r2(image_bytes: bytes) -> str:
     base_url = os.getenv("R2_PUBLIC_URL")
 
     filename = f"{uuid.uuid4().hex}.jpg"
-    upload_url = f"https://{account_id}.r2.cloudflarestorage.com/{filename}"
+    upload_url = f"{os.getenv('R2_UPLOAD_URL_BASE')}/{bucket}/{image_name}"
 
     headers = {
         "Authorization": f"Bearer {token}",
