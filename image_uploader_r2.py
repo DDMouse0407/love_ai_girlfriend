@@ -6,15 +6,15 @@ from botocore.client import Config
 def upload_image_to_r2(image_bytes):
     access_key = os.getenv("R2_ACCESS_KEY_ID")
     secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
-    account_id = os.getenv("R2_ACCOUNT_ID")
+    endpoint = os.getenv("R2_ENDPOINT_URL")  # ✅ 改為 .env 控制
     bucket = os.getenv("R2_BUCKET_NAME")
     public_base = os.getenv("R2_PUBLIC_BASE_URL")
 
-    if not all([access_key, secret_key, account_id, bucket, public_base]):
+    # 確保每個必要變數都存在
+    if not all([access_key, secret_key, endpoint, bucket, public_base]):
         raise EnvironmentError("❌ R2 環境變數未正確設定")
 
-    endpoint = f"https://{account_id}.r2.cloudflarestorage.com"
-
+    # 建立 S3 相容的 R2 客戶端
     s3 = boto3.client(
         "s3",
         region_name="auto",
@@ -24,6 +24,7 @@ def upload_image_to_r2(image_bytes):
         config=Config(signature_version="s3v4")
     )
 
+    # 產生唯一檔名
     image_name = f"{uuid.uuid4().hex}.jpg"
 
     try:
