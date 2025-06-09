@@ -1,25 +1,25 @@
 import os
 import requests
-from datetime import datetime
 
-# 讀取環境變數
-R2_BUCKET = os.getenv("R2_BUCKET")  # s985411
-R2_PUBLIC_BASE_URL = os.getenv("R2_PUBLIC_BASE_URL")  # https://pub-xxxxx.r2.dev
-R2_UPLOAD_URL_BASE = os.getenv("R2_UPLOAD_URL_BASE")  # https://xxxx.r2.cloudflarestorage.com
-R2_TOKEN = os.getenv("R2_API_TOKEN")  # Cloudflare R2 Token，建議具上傳權限即可
+def upload_image_to_r2(image_bytes: bytes, filename: str = "output.jpg") -> str:
+    # 從環境變數取得公開網址
+    public_url = os.getenv("R2_PUBLIC_URL")
+    if not public_url:
+        raise ValueError("R2_PUBLIC_URL 未設定")
 
-def upload_image_to_r2(image_bytes: bytes, filename_prefix: str = "ai_image") -> str:
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    filename = f"{filename_prefix}_{timestamp}.jpg"
-    upload_url = f"{R2_UPLOAD_URL_BASE}/{R2_BUCKET}/{filename}"
+    # 建立上傳目標網址（PUT 到公開 bucket）
+    upload_url = f"{public_url.rstrip('/')}/{filename}"
 
+    # 設定正確的 content-type
     headers = {
-        "Authorization": f"Bearer {R2_TOKEN}",
         "Content-Type": "image/jpeg"
     }
 
-    res = requests.put(upload_url, data=image_bytes, headers=headers)
-    if res.status_code != 200:
-        raise Exception(f"R2 圖片上傳失敗：{res.status_code} {res.text}")
+    # 上傳圖片
+    response = requests.put(upload_url, data=image_bytes, headers=headers)
 
-    return f"{R2_PUBLIC_BASE_URL}/{filename}"
+    # 檢查是否上傳成功
+    if response.status_code != 200:
+        raise RuntimeError(f"上傳失敗: {response.status_code} {response.text}")
+
+    return upload_url
