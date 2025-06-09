@@ -7,3 +7,4 @@ requests
 Pillow
 gradio>=4.27.0
 replicate
+boto3
