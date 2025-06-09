@@ -74,27 +74,36 @@ def handle_text(event):
 
     msg_count, is_paid, free_count = result
 
-    if message_text.startswith("/畫圖"):
+        if message_text.startswith("/畫圖"):
         prompt = message_text.replace("/畫圖", "").strip()
         if not prompt:
             response = "請輸入圖片主題，例如：`/畫圖 森林裡的綠髮女孩`"
         elif is_user_whitelisted(user_id) or is_paid or free_count > 0:
-            image_bytes = generate_image_bytes(prompt)
-            image_url = upload_image_to_r2(image_bytes)
-            reply_text = f"晴子醬幫你畫好了～主題是：「{prompt}」🌿"
-            line_bot_api.reply_message_with_http_info(
-                ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[
-                        TextMessage(text=reply_text),
-                        ImageMessage(original_content_url=image_url, preview_image_url=image_url)
-                    ]
+            try:
+                print(f"[DEBUG] 開始產生圖片，主題：{prompt}")
+                image_bytes = generate_image_bytes(prompt)
+                print(f"[DEBUG] 圖片產生成功，準備上傳 R2")
+                image_url = upload_image_to_r2(image_bytes)
+                print(f"[DEBUG] R2 上傳成功，圖片網址為：{image_url}")
+
+                reply_text = f"晴子醬幫你畫好了～主題是：「{prompt}」🌿"
+                line_bot_api.reply_message_with_http_info(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[
+                            TextMessage(text=reply_text),
+                            ImageMessage(original_content_url=image_url, preview_image_url=image_url)
+                        ]
+                    )
                 )
-            )
-            if not is_user_whitelisted(user_id) and not is_paid:
-                cursor.execute("UPDATE users SET free_count = free_count - 1 WHERE user_id=?", (user_id,))
-                conn.commit()
-            return
+
+                if not is_user_whitelisted(user_id) and not is_paid:
+                    cursor.execute("UPDATE users SET free_count = free_count - 1 WHERE user_id=?", (user_id,))
+                    conn.commit()
+                return
+            except Exception as e:
+                print(f"[ERROR] 處理 /畫圖 指令時發生錯誤：{e}")
+                response = "晴子醬畫畫的時候不小心迷路了...請稍後再試一次 🥺"
         else:
             response = "你已經用完免費體驗次數囉 🥺\n請購買晴子醬戀愛方案才能繼續畫圖 💖\n👉 https://p.ecpay.com.tw/97C358E"
     else:
