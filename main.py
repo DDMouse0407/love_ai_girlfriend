@@ -10,6 +10,7 @@ from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
 import uvicorn
 import os
 import sqlite3
+from datetime import datetime, timedelta
 from generate_image_bytes import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
@@ -30,7 +31,8 @@ CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     msg_count INTEGER DEFAULT 0,
     is_paid INTEGER DEFAULT 0,
-    free_count INTEGER DEFAULT 3
+    free_count INTEGER DEFAULT 3,
+    paid_until TEXT
 )
 """)
 conn.commit()
@@ -53,26 +55,65 @@ async def callback(request: Request):
 async def payment_callback(request: Request):
     data = await request.json()
     user_id = data.get("userId")
-    if user_id:
-        cursor.execute("UPDATE users SET is_paid = 1 WHERE user_id=?", (user_id,))
-        conn.commit()
-    return {"status": "paid"}
+    amount = int(data.get("amount", 0))
+
+    price_to_days = {
+        50: 1,
+        100: 3,
+        150: 5,
+        200: 7,
+        300: 14,
+        500: 30,
+        800: 60
+    }
+
+    days = price_to_days.get(amount)
+    if not days:
+        return {"status": "ignored", "reason": "金額不符任何方案"}
+
+    cursor.execute("SELECT paid_until FROM users WHERE user_id=?", (user_id,))
+    result = cursor.fetchone()
+
+    now = datetime.now()
+    if result and result[0]:
+        current_expiry = datetime.fromisoformat(result[0])
+        new_expiry = max(current_expiry, now) + timedelta(days=days)
+    else:
+        new_expiry = now + timedelta(days=days)
+
+    cursor.execute("""
+        INSERT INTO users (user_id, is_paid, paid_until)
+        VALUES (?, 1, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            is_paid=1,
+            paid_until=excluded.paid_until
+    """, (user_id, new_expiry.isoformat()))
+    conn.commit()
+
+    return {"status": "success", "paid_until": new_expiry.isoformat()}
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text(event):
     user_id = event.source.user_id
     message_text = event.message.text.strip()
 
-    cursor.execute("SELECT msg_count, is_paid, free_count FROM users WHERE user_id=?", (user_id,))
+    cursor.execute("SELECT msg_count, is_paid, free_count, paid_until FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
 
     if result is None:
-        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)",
-                       (user_id, 1, 0, 2))
+        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count, paid_until) VALUES (?, ?, ?, ?, ?)",
+                       (user_id, 1, 0, 2, None))
         conn.commit()
-        result = (1, 0, 2)
+        result = (1, 0, 2, None)
 
-    msg_count, is_paid, free_count = result
+    msg_count, is_paid, free_count, paid_until = result
+
+    # 檢查會員是否過期
+    if paid_until:
+        if datetime.fromisoformat(paid_until) < datetime.now():
+            is_paid = 0
+            cursor.execute("UPDATE users SET is_paid = 0 WHERE user_id=?", (user_id,))
+            conn.commit()
 
     if message_text.startswith("/畫圖"):
         prompt = message_text.replace("/畫圖", "").strip()
