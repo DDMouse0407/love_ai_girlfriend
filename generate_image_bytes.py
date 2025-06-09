@@ -1,37 +1,38 @@
-import requests
 import os
+import requests
 
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+MODEL_VERSION = os.getenv("REPLICATE_MODEL_VERSION", "f178c79bffec8c327201d839b6b319c5689c3086b98445c25066fcb3f2c4e2ea")
 
 def generate_image_bytes(prompt: str) -> bytes:
-    url = "https://api.replicate.com/v1/predictions"
+    url = f"https://api.replicate.com/v1/predictions"
     headers = {
         "Authorization": f"Token {REPLICATE_API_TOKEN}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
-    json_data = {
-        "version": "2286f7a162c66aad8c35c122a9f80f519d9ee20e",
-        "input": {"prompt": prompt}
+    data = {
+        "version": MODEL_VERSION,
+        "input": {
+            "prompt": prompt
+        }
     }
 
-    response = requests.post(url, headers=headers, json=json_data)
+    response = requests.post(url, json=data, headers=headers)
     if response.status_code != 201:
         raise Exception(f"Replicate API 建立任務失敗: {response.status_code} {response.text}")
 
     prediction = response.json()
     prediction_url = prediction["urls"]["get"]
 
-    # 等待模型完成預測
-    for _ in range(30):
-        res = requests.get(prediction_url, headers=headers)
-        output = res.json()
-        if output["status"] == "succeeded":
-            image_url = output["output"][0]
+    # 等待圖片生成完成
+    while True:
+        poll_response = requests.get(prediction_url, headers=headers)
+        result = poll_response.json()
+        if result["status"] == "succeeded":
             break
-        elif output["status"] == "failed":
-            raise Exception("Replicate 任務失敗")
-    else:
-        raise Exception("Replicate 任務逾時")
-
-    image_response = requests.get(image_url)
-    return image_response.content
+        elif result["status"] == "failed":
+            raise Exception(f"圖片生成失敗：{result}")
+    
+    image_url = result["output"][0]
+    image_bytes = requests.get(image_url).content
+    return image_bytes
