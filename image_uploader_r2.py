@@ -3,14 +3,14 @@ import uuid
 import requests
 
 def upload_image_to_r2(image_bytes):
-    bucket = os.getenv("R2_BUCKET")
+    bucket = os.getenv("R2_BUCKET_NAME")
     base_url = os.getenv("R2_UPLOAD_URL_BASE")
-    token = os.getenv("R2_API_TOKEN")
-    public_base = os.getenv("R2_PUBLIC_BASE_URL")
+    token = os.getenv("R2_ACCESS_TOKEN")
+    public_base = os.getenv("R2_PUBLIC_URL")
 
     # 防呆檢查
     if not all([bucket, base_url, token, public_base]):
-        raise EnvironmentError("❌ R2 環境變數未正確設定，請檢查 .env 檔案")
+        raise EnvironmentError("❌ R2 環境變數未正確設定，請檢查 Railway 的 Variables 設定")
 
     # 產生唯一檔名
     image_name = f"{uuid.uuid4().hex}.jpg"
