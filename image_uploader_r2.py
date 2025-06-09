@@ -4,15 +4,15 @@ import requests
 
 def upload_image_to_r2(image_bytes):
     bucket = os.getenv("R2_BUCKET_NAME")
-    base_url = os.getenv("R2_UPLOAD_URL_BASE")
     token = os.getenv("R2_ACCESS_TOKEN")
-    public_base = os.getenv("R2_PUBLIC_URL")
+    base_url = os.getenv("R2_UPLOAD_URL_BASE")
+    public_url = os.getenv("R2_PUBLIC_URL")
 
-    if not all([bucket, base_url, token, public_base]):
+    if not all([bucket, token, base_url, public_url]):
         raise EnvironmentError("❌ R2 環境變數未正確設定")
 
     image_name = f"{uuid.uuid4().hex}.jpg"
-    upload_url = f"{base_url}/{bucket}/{image_name}"
+    upload_url = f"{base_url}/{image_name}"
 
     print(f"[DEBUG] 上傳網址: {upload_url}")
 
@@ -29,6 +29,6 @@ def upload_image_to_r2(image_bytes):
         print(f"[ERROR] 上傳 R2 失敗: {e}")
         raise RuntimeError(f"Cloudflare R2 上傳失敗: {e}")
 
-    final_url = f"{public_base}/{image_name}"
-    print(f"[DEBUG] 圖片公開網址：{final_url}")
+    final_url = f"{public_url}/{image_name}"
+    print(f"[DEBUG] 圖片已上傳，公開網址為：{final_url}")
     return final_url
