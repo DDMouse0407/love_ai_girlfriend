@@ -74,7 +74,7 @@ def handle_text(event):
 
     msg_count, is_paid, free_count = result
 
-        if message_text.startswith("/畫圖"):
+    if message_text.startswith("/畫圖"):
         prompt = message_text.replace("/畫圖", "").strip()
         if not prompt:
             response = "請輸入圖片主題，例如：`/畫圖 森林裡的綠髮女孩`"
