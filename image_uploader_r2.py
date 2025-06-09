@@ -1,26 +1,25 @@
-import requests
-import uuid
 import os
-from dotenv import load_dotenv
+import requests
+from datetime import datetime
 
-load_dotenv()
+# 讀取環境變數
+R2_BUCKET = os.getenv("R2_BUCKET")  # s985411
+R2_PUBLIC_BASE_URL = os.getenv("R2_PUBLIC_BASE_URL")  # https://pub-xxxxx.r2.dev
+R2_UPLOAD_URL_BASE = os.getenv("R2_UPLOAD_URL_BASE")  # https://xxxx.r2.cloudflarestorage.com
+R2_TOKEN = os.getenv("R2_API_TOKEN")  # Cloudflare R2 Token，建議具上傳權限即可
 
-def upload_image_to_r2(image_bytes: bytes) -> str:
-    token = os.getenv("R2_ACCESS_TOKEN")
-    bucket = os.getenv("R2_BUCKET_NAME")  # 你的 bucket 名稱
-    account_id = os.getenv("R2_ACCOUNT_ID")  # 加入 account ID
-    base_url = os.getenv("R2_PUBLIC_URL")  # 公開連結使用的 base url
-
-    filename = f"{uuid.uuid4().hex}.jpg"
-    upload_url = f"https://{account_id}.r2.cloudflarestorage.com/{bucket}/{filename}"  # 修正重點
+def upload_image_to_r2(image_bytes: bytes, filename_prefix: str = "ai_image") -> str:
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"{filename_prefix}_{timestamp}.jpg"
+    upload_url = f"{R2_UPLOAD_URL_BASE}/{R2_BUCKET}/{filename}"
 
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {R2_TOKEN}",
         "Content-Type": "image/jpeg"
     }
 
-    response = requests.put(upload_url, data=image_bytes, headers=headers)
-    if response.status_code == 200:
-        return f"{base_url}/{filename}"  # 用公開網址給 LINE
-    else:
-        raise Exception(f"R2 上傳失敗: {response.status_code} - {response.text}")
+    res = requests.put(upload_url, data=image_bytes, headers=headers)
+    if res.status_code != 200:
+        raise Exception(f"R2 圖片上傳失敗：{res.status_code} {res.text}")
+
+    return f"{R2_PUBLIC_BASE_URL}/{filename}"
