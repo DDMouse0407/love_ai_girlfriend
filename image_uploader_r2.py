@@ -39,7 +39,7 @@ def upload_image_to_r2(image_bytes):
         print(f"[ERROR] R2 上傳失敗: {e}")
         raise RuntimeError(f"Cloudflare R2 上傳失敗: {e}")
 
-    # 回傳公開網址
-    final_url = f"{public_base}/{image_name}"
-    print(f"[DEBUG] 圖片網址為: {final_url}")
-    return final_url
+# 回傳公開網址
+final_url = f"{public_base.rstrip('/')}/{image_name}"
+print(f"[DEBUG] 圖片網址為: {final_url}")
+return final_url
