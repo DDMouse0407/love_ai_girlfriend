@@ -1,25 +1,27 @@
-import os
 import requests
+import uuid
+import os
+from dotenv import load_dotenv
 
-def upload_image_to_r2(image_bytes: bytes, filename: str = "output.jpg") -> str:
-    # 從環境變數取得公開網址
-    public_url = os.getenv("R2_PUBLIC_URL")
-    if not public_url:
-        raise ValueError("R2_PUBLIC_URL 未設定")
+load_dotenv()
 
-    # 建立上傳目標網址（PUT 到公開 bucket）
-    upload_url = f"{public_url.rstrip('/')}/{filename}"
+def upload_image_to_r2(image_bytes: bytes) -> str:
+    token = os.getenv("R2_ACCESS_TOKEN")
+    account_id = os.getenv("R2_ACCOUNT_ID")
+    bucket = os.getenv("R2_BUCKET_NAME")
+    base_url = os.getenv("R2_PUBLIC_URL")
 
-    # 設定正確的 content-type
+    filename = f"{uuid.uuid4().hex}.jpg"
+    upload_url = f"https://{account_id}.r2.cloudflarestorage.com/{filename}"
+
     headers = {
+        "Authorization": f"Bearer {token}",
         "Content-Type": "image/jpeg"
     }
 
-    # 上傳圖片
     response = requests.put(upload_url, data=image_bytes, headers=headers)
 
-    # 檢查是否上傳成功
-    if response.status_code != 200:
-        raise RuntimeError(f"上傳失敗: {response.status_code} {response.text}")
-
-    return upload_url
+    if response.status_code == 200:
+        return f"{base_url.rstrip('/')}/{filename}"
+    else:
+        raise Exception(f"R2 上傳失敗: {response.status_code} - {response.text}")
