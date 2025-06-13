@@ -84,7 +84,7 @@ def handle_text(event):
     result = cursor.fetchone()
 
     if result is None:
-    cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)",
+        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?, ?, ?, ?)",
                    (user_id, 1, 0, 10))  # 改為 10 次
     conn.commit()
     result = (1, 0, 10, None)
