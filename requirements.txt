@@ -5,6 +5,6 @@ openai
 python-dotenv
 requests
 Pillow
-gradio>=4.27.0
+gradio
 replicate
 boto3
