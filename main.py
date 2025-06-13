@@ -179,4 +179,12 @@ def handle_text(event):
     )
 
 if __name__ == "__main__":
-    uvicorn main:app --host 0.0.0.0 --port 8000 --log-level warning
+    # 想降低日誌層級可一起設定
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
+
+    uvicorn.run(
+        "main:app",               # 模組:實例
+        host="0.0.0.0",
+        port=8000,
+        log_level="warning",      # 這裡才用字串
+    )
