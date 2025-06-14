@@ -1,8 +1,8 @@
-import os, requests
-from dotenv import load_dotenv
+import requests
 
-load_dotenv()
-API_KEY = os.getenv("SD_API_KEY")
+import config
+
+API_KEY = config.SD_API_KEY
 
 def generate_image_bytes_sdapi(prompt: str) -> bytes:
     url = "https://stablediffusionapi.com/api/v3/text2img"  # 以實際 API Endpoint 為準
