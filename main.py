@@ -5,6 +5,7 @@ from typing import List
 import openai, boto3
 from pydub import AudioSegment
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.date import DateTrigger
 from fastapi import FastAPI, Request
 from dotenv import load_dotenv
 import uvicorn
@@ -14,7 +15,6 @@ from linebot.v3.messaging import (
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
-    ImageMessage,
     AudioMessage,
 )
 from linebot.v3.messaging.api_client import ApiClient
@@ -23,15 +23,11 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent, AudioMessageCo
 from linebot.v3.exceptions import InvalidSignatureError
 
 from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
-from generate_image_bytes import generate_image_bytes
-from image_uploader_r2 import upload_image_to_r2
 from style_prompt import wrap_as_rina
 
 load_dotenv()
 
-# ---------------------------
-# FastAPI & LINE 基本設定
-# ---------------------------
+# --------------------------- 基本設定 ---------------------------
 app = FastAPI()
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
@@ -39,9 +35,9 @@ config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 api_client = ApiClient(configuration=config)
 line_bot_api = MessagingApi(api_client=api_client)
 
-# ---------------------------
-# DB 初始化
-# ---------------------------
+tz = pytz.timezone("Asia/Taipei")
+
+# --------------------------- DB ---------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute(
@@ -57,169 +53,152 @@ CREATE TABLE IF NOT EXISTS users (
 )
 conn.commit()
 
-# ---------------------------
-# OpenAI & R2
-# ---------------------------
+# --------------------------- OpenAI & Whisper/TTS ---------------------------
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
-session = boto3.session.Session()
-r2_client = session.client(
-    "s3",
-    endpoint_url=os.getenv("R2_ENDPOINT"),
-    aws_access_key_id=os.getenv("R2_ACCESS_KEY"),
-    aws_secret_access_key=os.getenv("R2_SECRET_KEY"),
-)
-R2_BUCKET = os.getenv("R2_BUCKET")
-
-tz = pytz.timezone("Asia/Taipei")
-
-# ---------- 共用工具 ----------
-
-def synthesize_speech(text: str, voice: str = "alloy") -> Path:
-    response = openai.audio.speech.create(
-        model="tts-1",
-        voice=voice,
-        input=text,
-        format="mp3",
-    )
-    tmp_path = Path(tempfile.gettempdir()) / f"{uuid.uuid4()}.mp3"
-    tmp_path.write_bytes(response.content)
-    return tmp_path
-
-
-def upload_to_r2(local_path: Path, mime: str = "audio/mpeg") -> str:
-    key = f"audio/{uuid.uuid4()}{local_path.suffix}"
-    r2_client.upload_file(str(local_path), R2_BUCKET, key, ExtraArgs={"ACL": "public-read", "ContentType": mime})
-    return f"https://{R2_BUCKET}.r2.dev/{key}"
-
 
 PROMPT = "晴子醬與用戶的對話，請輸出繁體中文，口語可愛語氣。"
 
-def transcribe_audio(local_path: Path) -> str:
-    """Whisper ASR：最佳化 language & prompt"""
-    with local_path.open("rb") as f:
-        resp = openai.audio.transcriptions.create(
-            model="whisper-1",
-            file=f,
-            response_format="text",
-            language="zh",           # 指定繁中，加速推斷
-            prompt=PROMPT,            # 固定上文，穩定人稱與語氣
-            temperature=0             # 最保守，降低漂移
+def transcribe_audio(path: Path) -> str:
+    with path.open("rb") as f:
+        res = openai.audio.transcriptions.create(
+            model="whisper-1", file=f, response_format="text", language="zh", prompt=PROMPT, temperature=0
         )
-    return resp.strip()
+    return res.strip()
 
-# ---------------------------
-# FastAPI Routes
-# ---------------------------
+# --------------------------- 工具 ---------------------------
+
+def get_user_state(uid):
+    cursor.execute("SELECT msg_count,is_paid,free_count,paid_until FROM users WHERE user_id=?", (uid,))
+    row = cursor.fetchone()
+    if not row:
+        cursor.execute("INSERT INTO users(user_id,msg_count,is_paid,free_count) VALUES(?,0,0,10)", (uid,))
+        conn.commit()
+        return 0,0,10,None
+    return row
+
+def decrement_free(uid):
+    cursor.execute("UPDATE users SET free_count=free_count-1 WHERE user_id=?", (uid,))
+    conn.commit()
+
+async def quick_reply(token, text):
+    line_bot_api.reply_message_with_http_info(ReplyMessageRequest(token,[TextMessage(text=text)]))
+
+# --------------------------- LINE Handler ---------------------------
+@handler.add(MessageEvent, message=TextMessageContent)
+def text_handler(evt):
+    core_logic(evt, evt.message.text.strip())
+
+@handler.add(MessageEvent, message=AudioMessageContent)
+def audio_handler(evt):
+    stream = line_bot_api.get_message_content(evt.message.id)
+    tmp = Path(tempfile.gettempdir())/f"{uuid.uuid4()}.m4a"
+    with tmp.open("wb") as f:
+        for c in stream.iter_content(): f.write(c)
+    try:
+        txt = transcribe_audio(tmp)
+    except Exception as e:
+        logging.exception("ASR fail: %s",e)
+        asyncio.create_task(quick_reply(evt.reply_token,"晴子醬聽不懂這段語音🥺"))
+        return
+    core_logic(evt, txt)
+
+# --------------------------- 核心聊天邏輯 (簡寫) ---------------------------
+
+def core_logic(evt, text:str):
+    uid = evt.source.user_id
+    cnt, paid, free_cnt, paid_until = get_user_state(uid)
+
+    if text.startswith("/朗讀"):
+        speech = text.replace("/朗讀","").strip() or "你好，我是晴子醬！"
+        asyncio.create_task(quick_reply(evt.reply_token, f"(示意) 已朗讀：{speech}"))
+        return
+
+    # 普通聊天（示例）
+    if paid or free_cnt>0 or is_user_whitelisted(uid):
+        reply = wrap_as_rina(ask_openai(text)) if not is_over_token_quota() else "晴子醬今天嘴巴破皮...🥺"
+        line_bot_api.reply_message_with_http_info(ReplyMessageRequest(evt.reply_token,[TextMessage(text=reply)]))
+        if not (paid or is_user_whitelisted(uid)):
+            decrement_free(uid)
+    else:
+        asyncio.create_task(quick_reply(evt.reply_token,"免費次數用完囉，輸入 /購買 開通晴子醬💖"))
+
+# --------------------------- FastAPI Hooks ---------------------------
 @app.get("/callback")
-async def verify():
+async def ping():
     return "OK"
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
 @app.post("/callback")
-async def callback(request: Request):
-    signature = request.headers.get("x-line-signature")
-    body = await request.body()
+async def callback(req: Request):
+    sig = req.headers.get("x-line-signature")
+    body = await req.body()
     try:
-        handler.handle(body.decode(), signature)
+        handler.handle(body.decode(), sig)
     except InvalidSignatureError:
         return "Invalid signature"
     return "OK"
 
-# ---------------------------
-# LINE Handlers
-# ---------------------------
+@app.get("/health")
+async def health():
+    return {"status":"ok"}
 
-def get_user_state(user_id):
-    cursor.execute("SELECT msg_count, is_paid, free_count, paid_until FROM users WHERE user_id=?", (user_id,))
-    row = cursor.fetchone()
-    if row is None:
-        cursor.execute("INSERT INTO users (user_id, msg_count, is_paid, free_count) VALUES (?,0,0,10)", (user_id,))
-        conn.commit()
-        return 0, 0, 10, None
-    return row
+# --------------------------- 定時推播 ---------------------------
 
+# 🔔 每日隨機日常 / 聊天
+random_topics = [
+    "你今天吃了什麼好吃的～？晴子醬想聽！🍱",
+    "工作之餘別忘了抬頭看看雲朵☁️",
+    "今天的煩惱交給晴子醬保管，好嗎？🗄️",
+    "如果有時光機，你最想回到哪一天？⏳",
+    "下雨天的味道是不是有點浪漫？🌧️",
+]
 
-def decrement_free(user_id):
-    cursor.execute("UPDATE users SET free_count = free_count - 1 WHERE user_id=?", (user_id,))
-    conn.commit()
+# 🌤️ 早午晚問候
+morning_msgs = ["早安☀️！吃早餐了沒？", "晨光來敲門，晴子醬來說早安！"]
+noon_msgs    = ["午安～記得抬頭休息眼睛喔！", "中場補給時間，吃點好料吧 🍱"]
+night_msgs   = ["晚安🌙 今天辛苦了！", "夜深了，放下手機讓眼睛休息 💤"]
 
-async def reply_simple(token, text):
-    line_bot_api.reply_message_with_http_info(ReplyMessageRequest(token, [TextMessage(text=text)]))
+sched = BackgroundScheduler(timezone=tz)
 
-# Text
-@handler.add(MessageEvent, message=TextMessageContent)
-def on_text(event):
-    handle_logic(event, event.message.text.strip())
+# ------ 固定三餐 ------
 
-# Audio
-@handler.add(MessageEvent, message=AudioMessageContent)
-def on_audio(event):
-    msg_id = event.message.id
-    stream = line_bot_api.get_message_content(msg_id)
-    tmp = Path(tempfile.gettempdir()) / f"{uuid.uuid4()}.m4a"
-    with tmp.open("wb") as f:
-        for chunk in stream.iter_content():
-            f.write(chunk)
-    try:
-        text = transcribe_audio(tmp)
-    except Exception as e:
-        logging.exception("ASR error: %s", e)
-        asyncio.create_task(reply_simple(event.reply_token, "晴子醬沒聽清楚你的語音🥺"))
-        return
-    handle_logic(event, text)
-
-# 主邏輯（精簡示例，請自行合併其它指令）
-
-def handle_logic(event, text):
-    user_id = event.source.user_id
-    msg_count, is_paid, free_cnt, paid_until = get_user_state(user_id)
-
-    if text.startswith("/朗讀"):
-        speech = text.replace("/朗讀", "").strip() or "你好，我是晴子醬！"
-        if is_user_whitelisted(user_id) or is_paid or free_cnt > 0:
-            try:
-                mp3 = synthesize_speech(speech)
-                url = upload_to_r2(mp3)
-                dur = len(AudioSegment.from_file(mp3))
-                line_bot_api.reply_message_with_http_info(ReplyMessageRequest(event.reply_token, [AudioMessage(original_content_url=url, duration=dur)]))
-                if not (is_user_whitelisted(user_id) or is_paid):
-                    decrement_free(user_id)
-            except Exception as e:
-                logging.exception("TTS error: %s", e)
-                asyncio.create_task(reply_simple(event.reply_token, "語音生成失敗，稍後再試🥺"))
-        else:
-            asyncio.create_task(reply_simple(event.reply_token, "免費次數用完囉，輸入 /購買 開通晴子醬💖"))
-        return
-
-    # 其餘一般聊天
-    if is_user_whitelisted(user_id) or is_paid or free_cnt > 0:
-        reply = wrap_as_rina(ask_openai(text) if not is_over_token_quota() else "晴子醬今天嘴巴破皮...🥺")
-        line_bot_api.reply_message_with_http_info(ReplyMessageRequest(event.reply_token, [TextMessage(text=reply)]))
-        if not (is_user_whitelisted(user_id) or is_paid):
-            decrement_free(user_id)
-    else:
-        asyncio.create_task(reply_simple(event.reply_token, "免費次數用完囉，輸入 /購買 開通晴子醬💖"))
-
-# ---------------------------
-# 定時問候
-# ---------------------------
-
-greet_morning = ["早安☀️...", "晨光...", "元氣擁抱💪"]
-greet_noon = ["午安～", "伸個懶腰", "陪你午餐"]
-greet_night = ["晚安🌙", "夜深了", "你更閃耀✨"]
-
-def broadcast(msgs):
+def broadcast_fixed(msgs):
     try:
         line_bot_api.broadcast([TextMessage(text=random.choice(msgs))])
     except Exception as e:
-        logging.exception("Broadcast error: %s", e)
+        logging.exception("Fixed broadcast err: %s", e)
 
-sched = BackgroundScheduler(timezone=tz)
-    sched.add_job(lambda: broadcast_greeting(greet_morning), "cron", hour=7, minute=30)
-    sched.add_job(lambda: broadcast_greeting(greet_noon), "cron", hour=11, minute=30)
-    sched.add_job(lambda: broadcast_greeting(greet_night), "cron", hour=22, minute=0)
-    sched.start()
+sched.add_job(lambda: broadcast_fixed(morning_msgs), "cron", hour=7,  minute=30)
+sched.add_job(lambda: broadcast_fixed(noon_msgs),    "cron", hour=11, minute=30)
+sched.add_job(lambda: broadcast_fixed(night_msgs),   "cron", hour=22, minute=0)
+
+# ------ 每日隨機 ------
+
+def push_random_topic():
+    try:
+        line_bot_api.broadcast([TextMessage(text=random.choice(random_topics))])
+    except Exception as e:
+        logging.exception("Random broadcast err: %s", e)
+    finally:
+        schedule_next_random()  # 安排下一次
+
+
+def schedule_next_random():
+    now = datetime.datetime.now(tz)
+    hour = random.randint(9, 22)
+    minute = random.choice([0, 30])
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += datetime.timedelta(days=1)
+    sched.add_job(push_random_topic, trigger=DateTrigger(run_date=target))
+
+# 每天 02:00 重置隨機排程
+sched.add_job(schedule_next_random, "cron", hour=2, minute=0)
+# 啟動時排第一天
+schedule_next_random()
+
+sched.start()
+
+# --------------------------- Run ---------------------------
+if __name__ == "__main__":
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
+    uvicorn.run("main_v1_8_2:app", host="0.0.0.0", port=8000, log_level="warning")
