@@ -1,11 +1,18 @@
-import os, datetime, sqlite3, tempfile, uuid, logging, random, asyncio, pytz
+import datetime
+import sqlite3
+import tempfile
+import uuid
+import logging
+import random
+import asyncio
+import pytz
 from pathlib import Path
 
 import openai
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
 from fastapi import FastAPI, Request
-from dotenv import load_dotenv
+import config
 import uvicorn
 
 from linebot.v3.webhook import WebhookHandler
@@ -28,13 +35,11 @@ from image_uploader_r2 import upload_image_to_r2
 # ---------------------------
 # 基本設定
 # ---------------------------
-load_dotenv()
-
 app = FastAPI()
-handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+handler = WebhookHandler(config.LINE_CHANNEL_SECRET)
 
-config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
-api_client = ApiClient(configuration=config)
+line_cfg = Configuration(access_token=config.LINE_ACCESS_TOKEN)
+api_client = ApiClient(configuration=line_cfg)
 line_bot_api = MessagingApi(api_client=api_client)
 
 # Time‑zone & Logger
@@ -42,7 +47,7 @@ tz = pytz.timezone("Asia/Taipei")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 # OpenAI
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = config.OPENAI_API_KEY
 PROMPT = "晴子醬與用戶的對話，請輸出繁體中文，口語可愛語氣。"
 
 # ---------------------------
