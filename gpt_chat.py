@@ -1,5 +1,6 @@
 import os
-import requests
+import json
+import urllib.request
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -35,8 +36,19 @@ def is_user_whitelisted(user_id: str) -> bool:
 def is_over_token_quota():
     try:
         headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
-        usage = requests.get("https://api.openai.com/v1/dashboard/billing/usage", headers=headers).json().get("total_usage", 0) / 100.0
-        limit = requests.get("https://api.openai.com/v1/dashboard/billing/subscription", headers=headers).json().get("hard_limit_usd", 100)
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/dashboard/billing/usage", headers=headers
+        )
+        with urllib.request.urlopen(req) as resp:
+            usage = json.load(resp).get("total_usage", 0) / 100.0
+
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/dashboard/billing/subscription",
+            headers=headers,
+        )
+        with urllib.request.urlopen(req) as resp:
+            limit = json.load(resp).get("hard_limit_usd", 100)
+
         return usage > (limit * 0.8)
-    except:
+    except Exception:
         return False
