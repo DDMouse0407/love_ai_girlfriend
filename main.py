@@ -217,3 +217,40 @@ def broadcast_fixed(msgs):
         line_bot_api.broadcast([TextMessage(text=random.choice(msgs))])
     except Exception as e:
         logging.exception("Fixed broadcast err: %s", e)
+        
+# --- 隨機日常推播 ---
+
+def broadcast_random():
+    try:
+        line_bot_api.broadcast([TextMessage(text=random.choice(random_topics))])
+    except Exception as e:
+        logging.exception("Random broadcast err: %s", e)
+    finally:
+        schedule_next_random()
+
+
+def schedule_next_random():
+    now = datetime.datetime.now(tz)
+    hour = random.randint(9, 22)
+    minute = random.choice([0, 30])
+    run_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if run_time <= now:
+        run_time += datetime.timedelta(days=1)
+    sched.add_job(broadcast_random, trigger=DateTrigger(run_date=run_time))
+
+# --- 三餐固定 ---
+
+sched.add_job(lambda: broadcast_fixed(morning_msgs), 'cron', hour=7, minute=30)
+sched.add_job(lambda: broadcast_fixed(noon_msgs), 'cron', hour=12, minute=30)
+sched.add_job(lambda: broadcast_fixed(night_msgs), 'cron', hour=22, minute=0)
+
+# 初始與每日 02:00 重排隨機
+schedule_next_random()
+sched.add_job(schedule_next_random, 'cron', hour=2, minute=0)
+
+sched.start()
+
+# --------------------------- Run ---------------------------
+if __name__ == '__main__':
+    logging.getLogger('uvicorn').setLevel(logging.WARNING)
+    uvicorn.run('main_v1_9:app', host='0.0.0.0', port=8000, log_level='warning')
