@@ -216,4 +216,4 @@ def broadcast_fixed(msgs):
     try:
         line_bot_api.broadcast([TextMessage(text=random.choice(msgs))])
     except Exception as e:
-        logging.exception("Fixed broadcast err: %
+        logging.exception("Fixed broadcast err: %s", e)
