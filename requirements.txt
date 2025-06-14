@@ -8,3 +8,4 @@ Pillow
 gradio
 replicate
 boto3
+pydub
