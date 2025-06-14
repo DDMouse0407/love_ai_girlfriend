@@ -253,4 +253,4 @@ sched.start()
 # --------------------------- Run ---------------------------
 if __name__ == '__main__':
     logging.getLogger('uvicorn').setLevel(logging.WARNING)
-    uvicorn.run('main_v1_9:app', host='0.0.0.0', port=8000, log_level='warning')
+    uvicorn.run('main:app', host='0.0.0.0', port=8000, log_level='warning')
