@@ -1,17 +1,12 @@
-import os
 import json
 import urllib.request
-from dotenv import load_dotenv
 from openai import OpenAI
 
-# 載入環境變數
-load_dotenv()
+import config
 
-# 初始化新版 OpenAI 客戶端
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(api_key=config.OPENAI_API_KEY)
 
-# 安全載入白名單（過濾空字串）
-WHITELIST_USER_IDS = set(filter(None, os.getenv("WHITELIST_USER_IDS", "").split(",")))
+WHITELIST_USER_IDS = config.WHITELIST_USER_IDS
 print(f"💡 白名單 ID：{WHITELIST_USER_IDS}")
 
 def ask_openai(prompt: str) -> str:
@@ -35,7 +30,7 @@ def is_user_whitelisted(user_id: str) -> bool:
 
 def is_over_token_quota():
     try:
-        headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
+        headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}"}
         req = urllib.request.Request(
             "https://api.openai.com/v1/dashboard/billing/usage", headers=headers
         )
