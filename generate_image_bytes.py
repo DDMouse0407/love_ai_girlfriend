@@ -1,6 +1,11 @@
-import replicate
 import os
 import requests
+import replicate
+
+import config
+
+if config.REPLICATE_API_TOKEN:
+    os.environ.setdefault("REPLICATE_API_TOKEN", config.REPLICATE_API_TOKEN)
 
 # 請確認你已經在 Railway 設定好這個環境變數
 # os.environ["REPLICATE_API_TOKEN"] = "你的金鑰"
