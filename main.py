@@ -25,6 +25,9 @@ from style_prompt import wrap_as_rina
 from generate_image_bytes import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2
 
+# ---------------------------
+# 基本設定
+# ---------------------------
 load_dotenv()
 
 app = FastAPI()
@@ -34,84 +37,242 @@ config = Configuration(access_token=os.getenv("LINE_ACCESS_TOKEN"))
 api_client = ApiClient(configuration=config)
 line_bot_api = MessagingApi(api_client=api_client)
 
+# Time‑zone & Logger
 tz = pytz.timezone("Asia/Taipei")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-# ---------- DB ----------
+# OpenAI
+openai.api_key = os.getenv("OPENAI_API_KEY")
+PROMPT = "晴子醬與用戶的對話，請輸出繁體中文，口語可愛語氣。"
+
+# ---------------------------
+# 資料庫
+# ---------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cur = conn.cursor()
-cur.execute("""CREATE TABLE IF NOT EXISTS users(user_id TEXT PRIMARY KEY,msg_count INT,is_paid INT,free_count INT,paid_until TEXT)""")
-conn.commit(); FREE_QUOTA=10
+cur.execute(
+    """
+    CREATE TABLE IF NOT EXISTS users(
+        user_id TEXT PRIMARY KEY,
+        msg_count     INT DEFAULT 0,
+        is_paid       INT DEFAULT 0,
+        free_count    INT DEFAULT 10,
+        paid_until    TEXT
+    )"""
+)
+conn.commit()
 
-# ---------- OpenAI ----------
-openai.api_key=os.getenv("OPENAI_API_KEY"); PROMPT="晴子醬與用戶的對話，請輸出繁體中文，口語可愛語氣。"
+FREE_QUOTA = 10     # 免費可用次數
+MONTH_LIMIT = 100   # 月訊息量上限（之後擴充）
 
-def transcribe_audio(p:Path)->str:
-    with p.open("rb") as f:
-        return openai.audio.transcriptions.create(model="whisper-1",file=f,response_format="text",language="zh",prompt=PROMPT,temperature=0).strip()
+# ---------------------------
+# 公用函式
+# ---------------------------
 
-# ---------- Utils ----------
-
-def get_user(uid):
-    cur.execute("SELECT msg_count,is_paid,free_count,paid_until FROM users WHERE user_id=?",(uid,));row=cur.fetchone()
+def get_user(uid: str):
+    """抓取／初始化使用者資料"""
+    cur.execute("SELECT msg_count, is_paid, free_count, paid_until FROM users WHERE user_id=?", (uid,))
+    row = cur.fetchone()
     if not row:
-        cur.execute("INSERT INTO users(user_id,free_count) VALUES(?,?)",(uid,FREE_QUOTA));conn.commit();return 0,0,FREE_QUOTA,None
+        cur.execute("INSERT INTO users(user_id, free_count) VALUES(?, ?)", (uid, FREE_QUOTA))
+        conn.commit()
+        return 0, 0, FREE_QUOTA, None
     return row
 
-def dec_free(uid): cur.execute("UPDATE users SET free_count=free_count-1 WHERE user_id=?",(uid,));conn.commit()
 
-async def quick_reply(token:str,text:str):
-    line_bot_api.reply_message_with_http_info(ReplyMessageRequest(reply_token=token,messages=[TextMessage(text=text)]))
+def update_msg_stat(uid: str, decr_free: bool = False):
+    """統一更新訊息統計與免費額度"""
+    if decr_free:
+        cur.execute(
+            "UPDATE users SET msg_count = msg_count + 1, free_count = free_count - 1 WHERE user_id = ?",
+            (uid,),
+        )
+    else:
+        cur.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id = ?", (uid,))
+    conn.commit()
 
-# ---------- LINE events ----------
-@handler.add(MessageEvent,message=TextMessageContent)
-def on_text(e): process(e,e.message.text.strip())
 
-@handler.add(MessageEvent,message=AudioMessageContent)
+def dec_free(uid: str):
+    cur.execute("UPDATE users SET free_count = free_count - 1 WHERE user_id = ?", (uid,))
+    conn.commit()
+
+
+def transcribe_audio(p: Path) -> str:
+    with p.open("rb") as f:
+        return (
+            openai.audio.transcriptions.create(
+                model="whisper-1",
+                file=f,
+                response_format="text",
+                language="zh",
+                prompt=PROMPT,
+                temperature=0,
+            )
+            .strip()
+        )
+
+
+async def quick_reply(token: str, text: str):
+    """非同步回覆文字，避免阻塞"""
+    line_bot_api.reply_message_with_http_info(
+        ReplyMessageRequest(reply_token=token, messages=[TextMessage(text=text)])
+    )
+
+
+# ---------------------------
+# LINE 事件
+# ---------------------------
+@handler.add(MessageEvent, message=TextMessageContent)
+def on_text(e):
+    process(e, e.message.text.strip())
+
+
+@handler.add(MessageEvent, message=AudioMessageContent)
 def on_audio(e):
-    tmp=Path(tempfile.gettempdir())/f"{uuid.uuid4()}.m4a";s=line_bot_api.get_message_content(e.message.id)
+    tmp = Path(tempfile.gettempdir()) / f"{uuid.uuid4()}.m4a"
+    stream = line_bot_api.get_message_content(e.message.id)
     with tmp.open("wb") as f:
-        for c in s.iter_content(): f.write(c)
-    try: txt=transcribe_audio(tmp)
-    except Exception as er: logging.exception("ASR:%s",er);asyncio.create_task(quick_reply(e.reply_token,"晴子醬聽不懂這段語音🥺"));return
-    process(e,txt)
+        for chunk in stream.iter_content():
+            f.write(chunk)
+    try:
+        txt = transcribe_audio(tmp)
+    except Exception as er:
+        logging.exception("ASR: %s", er)
+        asyncio.create_task(quick_reply(e.reply_token, "晴子醬聽不懂這段語音🥺"))
+        return
+    process(e, txt)
 
-# ---------- Core ----------
 
-def process(e,text:str):
-    uid=e.source.user_id;mc,paid,fc,until=get_user(uid)
-    if until and datetime.datetime.strptime(until,"%Y-%m-%d").date()<datetime.datetime.now(tz).date():
-        paid=0;cur.execute("UPDATE users SET is_paid=0 WHERE user_id=?",(uid,));conn.commit()
+# ---------------------------
+# 指令邏輯
+# ---------------------------
 
-    if text=="/購買":
-        link=f"https://p.ecpay.com.tw/97C358E?customField={uid}";asyncio.create_task(quick_reply(e.reply_token,f"點我付款開通晴子醬 💖\n🔗 {link}"));return
-    if text=="/狀態查詢":
+def process(e, text: str):
+    uid = e.source.user_id
+
+    # 讀取目前狀態
+    msg_cnt, paid, free_cnt, until = get_user(uid)
+
+    # 會員是否過期 → 自動取消
+    if paid and until and datetime.datetime.strptime(until, "%Y-%m-%d").date() < datetime.datetime.now(tz).date():
+        paid = 0
+        cur.execute("UPDATE users SET is_paid = 0 WHERE user_id = ?", (uid,))
+        conn.commit()
+
+    # ---------------------
+    # /help
+    # ---------------------
+    if text == "/help":
+        help_msg = (
+            "✨ 晴子醬指令表 ✨\n"
+            "--------------------------\n"
+            "/畫圖 主題  → AI 畫圖\n"
+            "/朗讀 文字  → 晴子朗讀（示例）\n"
+            "/狀態查詢    → 查看剩餘次數 / 會員到期\n"
+            "/購買          → 付款連結\n"
+            "/幫我續費      → 快速續費連結\n"
+            "/help          → 本幫助\n"
+        )
+        asyncio.create_task(quick_reply(e.reply_token, help_msg))
+        return
+
+    # ---------------------
+    # /購買 /幫我續費
+    # ---------------------
+    if text in ("/購買", "/幫我續費"):
+        link = f"https://p.ecpay.com.tw/97C358E?customField={uid}"
+        asyncio.create_task(
+            quick_reply(e.reply_token, f"點我付款開通 / 續費晴子醬 💖\n🔗 {link}")
+        )
+        return
+
+    # ---------------------
+    # /狀態查詢
+    # ---------------------
+    if text == "/狀態查詢":
         if paid:
-            days=(datetime.datetime.strptime(until,"%Y-%m-%d").date()-datetime.datetime.now(tz).date()).days if until else 0
-            asyncio.create_task(quick_reply(e.reply_token,f"會員剩 {days} 天，到期日 {until} 💎"))
-        else: asyncio.create_task(quick_reply(e.reply_token,f"免費體驗剩 {fc} 次，輸入 /購買 解鎖更多功能 ✨"));return
+            days_left = (
+                datetime.datetime.strptime(until, "%Y-%m-%d").date() - datetime.datetime.now(tz).date()
+            ).days if until else 0
+            asyncio.create_task(
+                quick_reply(
+                    e.reply_token,
+                    f"💎 會員剩 {days_left} 天\n到期日：{until}\n月累計訊息：{msg_cnt}",
+                )
+            )
+        else:
+            asyncio.create_task(
+                quick_reply(
+                    e.reply_token,
+                    f"免費體驗剩 {free_cnt} 次\n月累計訊息：{msg_cnt}\n輸入 /購買 解鎖更多功能 ✨",
+                )
+            )
+        return
 
+    # ---------------------
+    # /畫圖
+    # ---------------------
     if text.startswith("/畫圖"):
-        prompt=text.replace("/畫圖","",1).strip()
-        if not prompt: asyncio.create_task(quick_reply(e.reply_token,"請輸入 /畫圖 主題"));return
-        if paid or is_user_whitelisted(uid) or fc>0:
-            try:
-                url=upload_image_to_r2(generate_image_bytes(prompt))
-                line_bot_api.reply_message_with_http_info(ReplyMessageRequest(reply_token=e.reply_token,messages=[TextMessage(text=f"晴子醬畫好了～\n主題：{prompt}"),ImageMessage(original_content_url=url,preview_image_url=url)]))
-                if not (paid or is_user_whitelisted(uid)): dec_free(uid)
-            except Exception as er: logging.exception("/畫圖:%s",er);asyncio.create_task(quick_reply(e.reply_token,"晴子醬畫畫失敗⋯稍後再試🥺"))
-        else: asyncio.create_task(quick_reply(e.reply_token,"免費次數用完，輸入 /購買 開通晴子醬💖"));return
+        prompt = text.replace("/畫圖", "", 1).strip()
+        if not prompt:
+            asyncio.create_task(quick_reply(e.reply_token, "請輸入 /畫圖 主題"))
+            return
 
+        # 權限檢查
+        can_use = paid or is_user_whitelisted(uid) or free_cnt > 0
+        if not can_use:
+            asyncio.create_task(quick_reply(e.reply_token, "免費次數用完，輸入 /購買 開通晴子醬💖"))
+            return
+
+        try:
+            url = upload_image_to_r2(generate_image_bytes(prompt))
+            line_bot_api.reply_message_with_http_info(
+                ReplyMessageRequest(
+                    reply_token=e.reply_token,
+                    messages=[
+                        TextMessage(text=f"晴子醬畫好了～\n主題：{prompt}"),
+                        ImageMessage(original_content_url=url, preview_image_url=url),
+                    ],
+                )
+            )
+            if not (paid or is_user_whitelisted(uid)):
+                dec_free(uid)
+        except Exception as er:
+            logging.exception("/畫圖: %s", er)
+            asyncio.create_task(quick_reply(e.reply_token, "晴子醬畫畫失敗⋯稍後再試🥺"))
+        return
+
+    # ---------------------
+    # /朗讀（示範）
+    # ---------------------
     if text.startswith("/朗讀"):
-        speech=text.replace("/朗讀","",1).strip() or "你好，我是晴子醬！";asyncio.create_task(quick_reply(e.reply_token,f"(示例) 晴子醬朗讀：{speech}"));return
+        speech = text.replace("/朗讀", "", 1).strip() or "你好，我是晴子醬！"
+        asyncio.create_task(quick_reply(e.reply_token, f"(示例) 晴子醬朗讀：{speech}"))
+        return
 
-    if paid or is_user_whitelisted(uid) or fc>0:
-        reply=wrap_as_rina(ask_openai(text) if not is_over_token_quota() else "晴子醬今天嘴巴破皮...🥺")
-        line_bot_api.reply_message_with_http_info(ReplyMessageRequest(reply_token=e.reply_token,messages=[TextMessage(text=reply)]))
-        if not (paid or is_user_whitelisted(uid)): dec_free(uid)
-    else: asyncio.create_task(quick_reply(e.reply_token,"免費體驗已用完，輸入 /購買 解鎖晴子醬💖"))
+    # ---------------------
+    # 一般聊天（GPT‑4o）
+    # ---------------------
+    can_chat = paid or is_user_whitelisted(uid) or free_cnt > 0
+    if not can_chat:
+        asyncio.create_task(quick_reply(e.reply_token, "免費體驗已用完，輸入 /購買 解鎖晴子醬💖"))
+        return
 
-# ---------- FastAPI ----------
+    # 取得回覆
+    reply_txt = (
+        wrap_as_rina(ask_openai(text)) if not is_over_token_quota() else "晴子醬今天嘴巴破皮...🥺"
+    )
+    line_bot_api.reply_message_with_http_info(
+        ReplyMessageRequest(reply_token=e.reply_token, messages=[TextMessage(text=reply_txt)])
+    )
+
+    # 更新統計 & 免費額度
+    update_msg_stat(uid, decr_free=not (paid or is_user_whitelisted(uid)))
+
+
+# ---------------------------
+# FastAPI Endpoints
+# ---------------------------
 @app.post("/callback")
 async def callback(req: Request):
     signature = req.headers.get("x-line-signature")
@@ -120,7 +281,6 @@ async def callback(req: Request):
     try:
         handler.handle(body.decode(), signature)
     except InvalidSignatureError:
-        # LINE Channel Secret 不符
         return "Invalid signature"
 
     return "OK"
@@ -128,35 +288,82 @@ async def callback(req: Request):
 
 @app.get("/health")
 async def health():
-    """Fly.io health‑check。"""
     return {"status": "ok"}
 
-# ---------- Broadcast ---------- ----------
-random_topics=["你今天吃了什麼好吃的～？晴子醬想聽！🍱","工作之餘別忘了抬頭看看雲朵☁️","今天的煩惱交給晴子醬保管，好嗎？🗄️","如果有時光機，你最想回到哪一天？⏳","下雨天的味道是不是有點浪漫？🌧️"]
-morning_msgs=["早安☀️！吃早餐了沒？","晨光來敲門，晴子醬來說早安！"]
-noon_msgs=["午安～記得抬頭休息眼睛喔！","中場補給時間，吃點好料吧 🍱"]
-night_msgs=["晚安🌙 今天辛苦了！","夜深了，放下手機讓眼睛休息 💤"]
 
-sched=BackgroundScheduler(timezone=tz)
+# ---------------------------
+# 廣播與到期提醒
+# ---------------------------
+random_topics = [
+    "你今天吃了什麼好吃的～？晴子醬想聽！🍱",
+    "工作之餘別忘了抬頭看看雲朵☁️",
+    "今天的煩惱交給晴子醬保管，好嗎？🗄️",
+    "如果有時光機，你最想回到哪一天？⏳",
+    "下雨天的味道是不是有點浪漫？🌧️",
+]
+
+auto_msgs = {
+    "morning": ["早安☀️！吃早餐了沒？", "晨光來敲門，晴子醬來說早安！"],
+    "noon": ["午安～記得抬頭休息眼睛喔！", "中場補給時間，吃點好料吧 🍱"],
+    "night": ["晚安🌙 今天辛苦了！", "夜深了，放下手機讓眼睛休息 💤"],
+}
+
+sched = BackgroundScheduler(timezone=tz)
+
 
 def broadcast(msgs):
-    try: line_bot_api.broadcast([TextMessage(text=random.choice(msgs))])
-    except Exception as e: logging.exception("broadcast:%s",e)
+    try:
+        line_bot_api.broadcast([TextMessage(text=random.choice(msgs))])
+    except Exception as e:
+        logging.exception("broadcast: %s", e)
 
-def broadcast_random(): broadcast(random_topics);schedule_next_random()
+
+def broadcast_random():
+    broadcast(random_topics)
+    schedule_next_random()
+
 
 def schedule_next_random():
-    now=datetime.datetime.now(tz);run=now.replace(hour=random.randint(9,22),minute=random.choice([0,30]),second=0,microsecond=0)
-    if run<=now: run+=datetime.timedelta(days=1)
-    sched.add_job(broadcast_random,trigger=DateTrigger(run_date=run))
+    now = datetime.datetime.now(tz)
+    run = now.replace(hour=random.randint(9, 22), minute=random.choice([0, 30]), second=0, microsecond=0)
+    if run <= now:
+        run += datetime.timedelta(days=1)
+    sched.add_job(broadcast_random, trigger=DateTrigger(run_date=run))
 
-# 固定三餐
-sched.add_job(lambda:broadcast(morning_msgs),"cron",hour=7,minute=30)
-sched.add_job(lambda:broadcast(noon_msgs),"cron",hour=12,minute=30)
-sched.add_job(lambda:broadcast(night_msgs),"cron",hour=22,minute=0)
 
-schedule_next_random();sched.add_job(schedule_next_random,"cron",hour=2,minute=0);sched.start()
+# 固定三餐提醒
+sched.add_job(lambda: broadcast(auto_msgs["morning"]), "cron", hour=7, minute=30)
+sched.add_job(lambda: broadcast(auto_msgs["noon"]), "cron", hour=12, minute=30)
+sched.add_job(lambda: broadcast(auto_msgs["night"]), "cron", hour=22, minute=0)
 
-# ---------- Run ----------
-if __name__=="__main__":
-    uvicorn.run("main:app",host="0.0.0.0",port=8000,log_level="warning")
+# 隨機主題
+schedule_next_random()
+
+
+# ---------------------------
+# 會員到期前提醒（每天 10:00）
+# ---------------------------
+
+def send_expiry_reminders():
+    tomorrow = (datetime.datetime.now(tz) + datetime.timedelta(days=1)).date().isoformat()
+    cur.execute("SELECT user_id, paid_until FROM users WHERE is_paid = 1 AND paid_until = ?", (tomorrow,))
+    for uid, date_str in cur.fetchall():
+        try:
+            line_bot_api.push_message(
+                uid,
+                [TextMessage(text=f"晴子醬提醒：會員將於 {date_str} 到期～\n輸入 /幫我續費 立即續約 💖")],
+            )
+        except Exception as e:
+            logging.exception("reminder push: %s", e)
+
+
+sched.add_job(send_expiry_reminders, "cron", hour=10, minute=0)
+
+# 啟動 Scheduler
+sched.start()
+
+# ---------------------------
+# 執行 FastAPI
+# ---------------------------
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, log_level="warning")
