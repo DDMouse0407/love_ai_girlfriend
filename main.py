@@ -241,7 +241,7 @@ def schedule_next_random():
 # --- 三餐固定 ---
 
 sched.add_job(lambda: broadcast_fixed(morning_msgs), 'cron', hour=7, minute=30)
-sched.add_job(lambda: broadcast_fixed(noon_msgs), 'cron', hour=12, minute=30)
+sched.add_job(lambda: broadcast_fixed(noon_msgs), 'cron', hour=11, minute=30)
 sched.add_job(lambda: broadcast_fixed(night_msgs), 'cron', hour=22, minute=0)
 
 # 初始與每日 02:00 重排隨機
