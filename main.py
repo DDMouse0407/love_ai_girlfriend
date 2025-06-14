@@ -113,14 +113,27 @@ def process(e,text:str):
 
 # ---------- FastAPI ----------
 @app.post("/callback")
-async def callback(req:Request): sig=req.headers.get("x-line-signature");body=await req.body();
-    try: handler.handle(body.decode(),sig)
-    except InvalidSignatureError: return "Invalid signature";return "OK"
+async def callback(req: Request):
+    """LINE webhook 入口 (POST)。"""
+
+    signature = req.headers.get("x-line-signature")
+    body: bytes = await req.body()
+
+    try:
+        handler.handle(body.decode(), signature)
+    except InvalidSignatureError:
+        # LINE Channel Secret 不符
+        return "Invalid signature"
+
+    return "OK"
+
 
 @app.get("/health")
-async def health(): return {"status":"ok"}
+async def health():
+    """Fly.io health‑check。"""
+    return {"status": "ok"}
 
-# ---------- Broadcast ----------
+# ---------- Broadcast ---------- ----------
 random_topics=["你今天吃了什麼好吃的～？晴子醬想聽！🍱","工作之餘別忘了抬頭看看雲朵☁️","今天的煩惱交給晴子醬保管，好嗎？🗄️","如果有時光機，你最想回到哪一天？⏳","下雨天的味道是不是有點浪漫？🌧️"]
 morning_msgs=["早安☀️！吃早餐了沒？","晨光來敲門，晴子醬來說早安！"]
 noon_msgs=["午安～記得抬頭休息眼睛喔！","中場補給時間，吃點好料吧 🍱"]
@@ -141,7 +154,7 @@ def schedule_next_random():
 
 # 固定三餐
 sched.add_job(lambda:broadcast(morning_msgs),"cron",hour=7,minute=30)
-sched.add_job(lambda:broadcast(noon_msgs),"cron",hour=11,minute=30)
+sched.add_job(lambda:broadcast(noon_msgs),"cron",hour=12,minute=30)
 sched.add_job(lambda:broadcast(night_msgs),"cron",hour=22,minute=0)
 
 schedule_next_random();sched.add_job(schedule_next_random,"cron",hour=2,minute=0);sched.start()
