@@ -1,20 +1,3 @@
-"""
-晴子醬 LINE Bot – V1.8  
-新增功能：
-1. **ASR 語音辨識**：支援使用者傳語音訊息，透過 OpenAI Whisper (whisper-1) 轉文字，再走原有聊天邏輯。
-2. **早安 / 午安 / 晚安 自動推播**：每天 07:30、12:30、22:00 (Asia/Taipei) 自動推送隨機話題問候。
-   * 推播對象為 `users` 資料表內所有使用者。
-
-環境變數新增：  
-- `OPENAI_API_KEY`－Whisper 與 TTS 共用  
-- 其他 R2 & LINE 參數沿用 V1.7
-
-依賴套件新增：  
-```bash
-pip install apscheduler==3.* pydub boto3 openai
-```
-"""
-
 import os, datetime, sqlite3, tempfile, uuid, logging, random
 from pathlib import Path
 from typing import Optional, List
