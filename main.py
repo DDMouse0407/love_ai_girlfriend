@@ -1,14 +1,3 @@
-"""
-晴子醬 LINE Bot – V1.8.1  
-改進：
-1. **Whisper 參數最佳化**  
-   * 明確指定 `language="zh"`（繁中）加速推斷並避免誤判  
-   * 加入固定 `prompt`：告訴模型「晴子醬與用戶的聊天，請輸出繁體中文」以增補上下文  
-   * 保留 `response_format="text"`，保持原本簡潔純文字輸出
-
-其他功能與 V1.8 相同（ASR / TTS / 定時問候）。
-"""
-
 import os, datetime, sqlite3, tempfile, uuid, logging, random, asyncio, pytz
 from pathlib import Path
 from typing import List
