@@ -114,8 +114,6 @@ def process(e,text:str):
 # ---------- FastAPI ----------
 @app.post("/callback")
 async def callback(req: Request):
-    """LINE webhook 入口 (POST)。"""
-
     signature = req.headers.get("x-line-signature")
     body: bytes = await req.body()
 
