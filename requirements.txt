@@ -8,6 +8,6 @@ Pillow
 gradio
 replicate
 boto3
-pydub
 apscheduler
 gTTS
+mutagen

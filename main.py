@@ -143,17 +143,19 @@ def transcribe_audio(p: Path) -> str:
 def synthesize_speech(text: str) -> tuple[bytes, int]:
     """Convert text to speech and return audio bytes and duration (ms)."""
     from gtts import gTTS
-    from pydub import AudioSegment
+    from mutagen.mp3 import MP3
     import io
 
+    # generate speech using gTTS
     buf = io.BytesIO()
     gTTS(text=text, lang="zh-tw").write_to_fp(buf)
-    buf.seek(0)
-    seg = AudioSegment.from_file(buf, format="mp3")
-    duration_ms = len(seg)
-    out = io.BytesIO()
-    seg.export(out, format="mp3")
-    return out.getvalue(), duration_ms
+    mp3_bytes = buf.getvalue()
+
+    # calculate duration using mutagen (no ffmpeg required)
+    audio = MP3(io.BytesIO(mp3_bytes))
+    duration_ms = int(audio.info.length * 1000)
+
+    return mp3_bytes, duration_ms
 
 async def quick_reply(token: str, text: str):
     """非同步回覆文字，避免阻塞"""
