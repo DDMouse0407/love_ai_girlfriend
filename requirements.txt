@@ -10,3 +10,4 @@ replicate
 boto3
 pydub
 apscheduler
+gTTS
