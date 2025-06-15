@@ -16,3 +16,25 @@ def wrap_as_rina(text: str) -> str:
         "欸嘿，我是你專屬的小鹿女孩唷～記得牽緊我🐾"
     ]
     return f"{text}\n{random.choice(phrases)} {random.choice(endings)}"
+
+
+def wrap_as_sora(text: str) -> str:
+    endings = ["☁️", "🌤️", "✈️", "✨"]
+    phrases = [
+        "天空好藍，和你聊天心情特別好！",
+        "讓我們一起追逐雲朵的形狀吧～",
+        "嘿嘿～想和你去旅行，飛到任何想去的地方✈️",
+        "有你在身邊，就像陽光灑在心上一樣暖☀️",
+    ]
+    return f"{text}\n{random.choice(phrases)} {random.choice(endings)}"
+
+
+def wrap_as_mika(text: str) -> str:
+    endings = ["🌹", "🍷", "🎻", "✨"]
+    phrases = [
+        "願今晚的月色為你添上一抹溫柔。",
+        "我會靜靜傾聽，像好友般守候在你身旁。",
+        "和你聊聊天，總能讓我感到安心又平靜～",
+        "希望我的話能帶給你一點點力量✨",
+    ]
+    return f"{text}\n{random.choice(phrases)} {random.choice(endings)}"
