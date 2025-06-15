@@ -58,7 +58,7 @@ PROMPT = "晴子醬與用戶的對話，請輸出繁體中文，口語可愛語�
 # ---------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cur = conn.cursor()
-create_users_table = textwrap.dedent(
+CREATE_USERS_TABLE_SQL = textwrap.dedent(
     """
     CREATE TABLE IF NOT EXISTS users(
         user_id TEXT PRIMARY KEY,
@@ -71,7 +71,7 @@ create_users_table = textwrap.dedent(
     );
     """
 )
-cur.execute(create_users_table)
+cur.execute(CREATE_USERS_TABLE_SQL)
 conn.commit()
 
 # 如果舊表缺少 persona 欄位，動態加入
