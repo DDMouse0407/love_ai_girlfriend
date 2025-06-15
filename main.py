@@ -6,6 +6,7 @@ import logging
 import random
 import asyncio
 import pytz
+import textwrap
 from pathlib import Path
 
 import openai
@@ -57,7 +58,7 @@ PROMPT = "晴子醬與用戶的對話，請輸出繁體中文，口語可愛語�
 # ---------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cur = conn.cursor()
-cur.execute(
+create_users_table = textwrap.dedent(
     """
     CREATE TABLE IF NOT EXISTS users(
         user_id TEXT PRIMARY KEY,
@@ -67,8 +68,10 @@ cur.execute(
         paid_until    TEXT,
         persona       TEXT DEFAULT 'rina',
         group_personas TEXT
-    )"""
+    );
+    """
 )
+cur.execute(create_users_table)
 conn.commit()
 
 # 如果舊表缺少 persona 欄位，動態加入
@@ -91,7 +94,7 @@ MONTH_LIMIT = 100   # 月訊息量上限（之後擴充）
 def get_user(uid: str):
     """抓取／初始化使用者資料"""
     cur.execute(
-        "SELECT msg_count, is_paid, free_count, paid_until, persona FROM users WHERE user_id=?",
+        "SELECT msg_count, is_paid, free_count, paid_until, persona, group_personas FROM users WHERE user_id=?",
         (uid,),
     )
     row = cur.fetchone()
