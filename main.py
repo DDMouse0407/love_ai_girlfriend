@@ -21,6 +21,7 @@ from linebot.v3.messaging import (
     ReplyMessageRequest,
     TextMessage,
     ImageMessage,
+    AudioMessage,
 )
 from linebot.v3.messaging.api_client import ApiClient
 from linebot.v3.messaging.configuration import Configuration
@@ -30,7 +31,7 @@ from linebot.v3.exceptions import InvalidSignatureError
 from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
 from style_prompt import wrap_as_rina
 from generate_image_bytes import generate_image_bytes
-from image_uploader_r2 import upload_image_to_r2
+from image_uploader_r2 import upload_image_to_r2, upload_audio_to_r2
 
 # ---------------------------
 # 基本設定
@@ -114,8 +115,23 @@ def transcribe_audio(p: Path) -> str:
                 temperature=0,
             )
             .strip()
-        )
+    )
 
+
+def synthesize_speech(text: str) -> tuple[bytes, int]:
+    """Convert text to speech and return audio bytes and duration (ms)."""
+    from gtts import gTTS
+    from pydub import AudioSegment
+    import io
+
+    buf = io.BytesIO()
+    gTTS(text=text, lang="zh-tw").write_to_fp(buf)
+    buf.seek(0)
+    seg = AudioSegment.from_file(buf, format="mp3")
+    duration_ms = len(seg)
+    out = io.BytesIO()
+    seg.export(out, format="mp3")
+    return out.getvalue(), duration_ms
 
 async def quick_reply(token: str, text: str):
     """非同步回覆文字，避免阻塞"""
@@ -252,7 +268,18 @@ def process(e, text: str):
     # ---------------------
     if text.startswith("/朗讀"):
         speech = text.replace("/朗讀", "", 1).strip() or "你好，我是晴子醬！"
-        asyncio.create_task(quick_reply(e.reply_token, f"(示例) 晴子醬朗讀：{speech}"))
+        try:
+            audio_bytes, dur = synthesize_speech(speech)
+            url = upload_audio_to_r2(audio_bytes)
+            line_bot_api.reply_message_with_http_info(
+                ReplyMessageRequest(
+                    reply_token=e.reply_token,
+                    messages=[AudioMessage(original_content_url=url, duration=dur)],
+                )
+            )
+        except Exception as er:
+            logging.exception("/朗讀: %s", er)
+            asyncio.create_task(quick_reply(e.reply_token, "晴子醬朗讀失敗⋯🥺"))
         return
 
     # ---------------------
