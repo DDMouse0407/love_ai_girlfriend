@@ -169,6 +169,7 @@ def on_text(e):
 
 @handler.add(MessageEvent, message=AudioMessageContent)
 def on_audio(e):
+    uid = e.source.user_id
     tmp = Path(tempfile.gettempdir()) / f"{uuid.uuid4()}.m4a"
     stream = line_bot_api.get_message_content(e.message.id)
     with tmp.open("wb") as f:
@@ -178,7 +179,8 @@ def on_audio(e):
         txt = transcribe_audio(tmp)
     except Exception as er:
         logging.exception("ASR: %s", er)
-        asyncio.create_task(quick_reply(e.reply_token, "晴子醬聽不懂這段語音🥺"))
+        display_name = PERSONAS.get(get_user(uid)[4], PERSONAS[DEFAULT_PERSONA])["display"]
+        asyncio.create_task(quick_reply(e.reply_token, f"{display_name}聽不懂這段語音🥺"))
         return
     process(e, txt)
 
@@ -203,11 +205,12 @@ def process(e, text: str):
     # /help
     # ---------------------
     if text == "/help":
+        display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
         help_msg = (
-            "✨ 晴子醬指令表 ✨\n"
+            f"✨ {display_name}指令表 ✨\n"
             "--------------------------\n"
             "/畫圖 主題  → AI 畫圖\n"
-            "/朗讀 文字  → 晴子朗讀（示例）\n"
+            f"/朗讀 文字  → {display_name}朗讀（示例）\n"
             "/狀態查詢    → 查看剩餘次數 / 會員到期\n"
             "/購買          → 付款連結\n"
             "/幫我續費      → 快速續費連結\n"
@@ -223,8 +226,9 @@ def process(e, text: str):
     # ---------------------
     if text in ("/購買", "/幫我續費"):
         link = f"https://p.ecpay.com.tw/97C358E?customField={uid}"
+        display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
         asyncio.create_task(
-            quick_reply(e.reply_token, f"點我付款開通 / 續費晴子醬 💖\n🔗 {link}")
+            quick_reply(e.reply_token, f"點我付款開通 / 續費{display_name} 💖\n🔗 {link}")
         )
         return
 
@@ -329,16 +333,18 @@ def process(e, text: str):
         # 權限檢查
         can_use = paid or is_user_whitelisted(uid) or free_cnt > 0
         if not can_use:
-            asyncio.create_task(quick_reply(e.reply_token, "免費次數用完，輸入 /購買 開通晴子醬💖"))
+            display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
+            asyncio.create_task(quick_reply(e.reply_token, f"免費次數用完，輸入 /購買 開通{display_name}💖"))
             return
 
         try:
             url = upload_image_to_r2(generate_image_bytes(prompt))
+            display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
             line_bot_api.reply_message_with_http_info(
                 ReplyMessageRequest(
                     reply_token=e.reply_token,
                     messages=[
-                        TextMessage(text=f"晴子醬畫好了～\n主題：{prompt}"),
+                        TextMessage(text=f"{display_name}畫好了～\n主題：{prompt}"),
                         ImageMessage(original_content_url=url, preview_image_url=url),
                     ],
                 )
@@ -347,14 +353,16 @@ def process(e, text: str):
                 dec_free(uid)
         except Exception as er:
             logging.exception("/畫圖: %s", er)
-            asyncio.create_task(quick_reply(e.reply_token, "晴子醬畫畫失敗⋯稍後再試🥺"))
+            display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
+            asyncio.create_task(quick_reply(e.reply_token, f"{display_name}畫畫失敗⋯稍後再試🥺"))
         return
 
     # ---------------------
     # /朗讀（示範）
     # ---------------------
     if text.startswith("/朗讀"):
-        speech = text.replace("/朗讀", "", 1).strip() or "你好，我是晴子醬！"
+        display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
+        speech = text.replace("/朗讀", "", 1).strip() or f"你好，我是{display_name}！"
         try:
             audio_bytes, dur = synthesize_speech(speech)
             url = upload_audio_to_r2(audio_bytes)
@@ -366,7 +374,7 @@ def process(e, text: str):
             )
         except Exception as er:
             logging.exception("/朗讀: %s", er)
-            asyncio.create_task(quick_reply(e.reply_token, "晴子醬朗讀失敗⋯🥺"))
+            asyncio.create_task(quick_reply(e.reply_token, f"{display_name}朗讀失敗⋯🥺"))
         return
 
     # ---------------------
@@ -374,7 +382,8 @@ def process(e, text: str):
     # ---------------------
     can_chat = paid or is_user_whitelisted(uid) or free_cnt > 0
     if not can_chat:
-        asyncio.create_task(quick_reply(e.reply_token, "免費體驗已用完，輸入 /購買 解鎖晴子醬💖"))
+        display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
+        asyncio.create_task(quick_reply(e.reply_token, f"免費體驗已用完，輸入 /購買 解鎖{display_name}💖"))
         return
 
     # 取得回覆
@@ -384,16 +393,19 @@ def process(e, text: str):
         for key in group_personas.split(","):
             func = wrappers.get(key, PERSONAS[DEFAULT_PERSONA]["wrapper"])
             if is_over_token_quota():
-                reply = "晴子醬今天嘴巴破皮...🥺"
+                disp = PERSONAS.get(key, PERSONAS[DEFAULT_PERSONA])["display"]
+                reply = f"{disp}今天嘴巴破皮...🥺"
             else:
                 reply = func(ask_openai(text, key))
             reply_parts.append(reply)
         reply_txt = "\n\n".join(reply_parts)
     else:
         wrap_func = wrappers.get(persona, PERSONAS[DEFAULT_PERSONA]["wrapper"])
-        reply_txt = (
-            wrap_func(ask_openai(text, persona)) if not is_over_token_quota() else "晴子醬今天嘴巴破皮...🥺"
-        )
+        if is_over_token_quota():
+            display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
+            reply_txt = f"{display_name}今天嘴巴破皮...🥺"
+        else:
+            reply_txt = wrap_func(ask_openai(text, persona))
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(reply_token=e.reply_token, messages=[TextMessage(text=reply_txt)])
     )
@@ -427,15 +439,15 @@ async def health():
 # 廣播與到期提醒
 # ---------------------------
 random_topics = [
-    "你今天吃了什麼好吃的～？晴子醬想聽！🍱",
+    "你今天吃了什麼好吃的～？我想聽！🍱",
     "工作之餘別忘了抬頭看看雲朵☁️",
-    "今天的煩惱交給晴子醬保管，好嗎？🗄️",
+    "今天的煩惱交給我保管，好嗎？🗄️",
     "如果有時光機，你最想回到哪一天？⏳",
     "下雨天的味道是不是有點浪漫？🌧️",
 ]
 
 auto_msgs = {
-    "morning": ["早安☀️！吃早餐了沒？", "晨光來敲門，晴子醬來說早安！"],
+    "morning": ["早安☀️！吃早餐了沒？", "晨光來敲門，我來說早安！"],
     "noon": ["午安～記得抬頭休息眼睛喔！", "中場補給時間，吃點好料吧 🍱"],
     "night": ["晚安🌙 今天辛苦了！", "夜深了，放下手機讓眼睛休息 💤"],
 }
@@ -478,12 +490,13 @@ schedule_next_random()
 
 def send_expiry_reminders():
     tomorrow = (datetime.datetime.now(tz) + datetime.timedelta(days=1)).date().isoformat()
-    cur.execute("SELECT user_id, paid_until FROM users WHERE is_paid = 1 AND paid_until = ?", (tomorrow,))
-    for uid, date_str in cur.fetchall():
+    cur.execute("SELECT user_id, paid_until, persona FROM users WHERE is_paid = 1 AND paid_until = ?", (tomorrow,))
+    for uid, date_str, persona in cur.fetchall():
+        display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
         try:
             line_bot_api.push_message(
                 uid,
-                [TextMessage(text=f"晴子醬提醒：會員將於 {date_str} 到期～\n輸入 /幫我續費 立即續約 💖")],
+                [TextMessage(text=f"{display_name}提醒：會員將於 {date_str} 到期～\n輸入 /幫我續費 立即續約 💖")],
             )
         except Exception as e:
             logging.exception("reminder push: %s", e)
