@@ -29,7 +29,8 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent, AudioMessageCo
 from linebot.v3.exceptions import InvalidSignatureError
 
 from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
-from style_prompt import wrap_as_rina
+from personas import PERSONAS, DEFAULT_PERSONA
+from style_prompt import wrap_as_rina, wrap_as_sora, wrap_as_mika
 from generate_image_bytes import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2, upload_audio_to_r2
 
@@ -63,10 +64,18 @@ cur.execute(
         msg_count     INT DEFAULT 0,
         is_paid       INT DEFAULT 0,
         free_count    INT DEFAULT 10,
-        paid_until    TEXT
+        paid_until    TEXT,
+        persona       TEXT DEFAULT 'rina'
     )"""
 )
 conn.commit()
+
+# 如果舊表缺少 persona 欄位，動態加入
+cur.execute("PRAGMA table_info(users)")
+cols = [c[1] for c in cur.fetchall()]
+if "persona" not in cols:
+    cur.execute("ALTER TABLE users ADD COLUMN persona TEXT DEFAULT 'rina'")
+    conn.commit()
 
 FREE_QUOTA = 10     # 免費可用次數
 MONTH_LIMIT = 100   # 月訊息量上限（之後擴充）
@@ -77,12 +86,18 @@ MONTH_LIMIT = 100   # 月訊息量上限（之後擴充）
 
 def get_user(uid: str):
     """抓取／初始化使用者資料"""
-    cur.execute("SELECT msg_count, is_paid, free_count, paid_until FROM users WHERE user_id=?", (uid,))
+    cur.execute(
+        "SELECT msg_count, is_paid, free_count, paid_until, persona FROM users WHERE user_id=?",
+        (uid,),
+    )
     row = cur.fetchone()
     if not row:
-        cur.execute("INSERT INTO users(user_id, free_count) VALUES(?, ?)", (uid, FREE_QUOTA))
+        cur.execute(
+            "INSERT INTO users(user_id, free_count, persona) VALUES(?, ?, ?)",
+            (uid, FREE_QUOTA, DEFAULT_PERSONA),
+        )
         conn.commit()
-        return 0, 0, FREE_QUOTA, None
+        return 0, 0, FREE_QUOTA, None, DEFAULT_PERSONA
     return row
 
 
@@ -172,7 +187,7 @@ def process(e, text: str):
     uid = e.source.user_id
 
     # 讀取目前狀態
-    msg_cnt, paid, free_cnt, until = get_user(uid)
+    msg_cnt, paid, free_cnt, until, persona = get_user(uid)
 
     # 會員是否過期 → 自動取消
     if paid and until and datetime.datetime.strptime(until, "%Y-%m-%d").date() < datetime.datetime.now(tz).date():
@@ -192,6 +207,7 @@ def process(e, text: str):
             "/狀態查詢    → 查看剩餘次數 / 會員到期\n"
             "/購買          → 付款連結\n"
             "/幫我續費      → 快速續費連結\n"
+            "/角色 [名稱] → 切換聊天角色\n"
             "/help          → 本幫助\n"
         )
         asyncio.create_task(quick_reply(e.reply_token, help_msg))
@@ -228,6 +244,34 @@ def process(e, text: str):
                     f"免費體驗剩 {free_cnt} 次\n月累計訊息：{msg_cnt}\n輸入 /購買 解鎖更多功能 ✨",
                 )
             )
+        return
+
+    # ---------------------
+    # /角色
+    # ---------------------
+    if text.startswith("/角色"):
+        name = text.replace("/角色", "", 1).strip()
+        if not name:
+            choices = "、".join([p["display"] for p in PERSONAS.values()])
+            asyncio.create_task(
+                quick_reply(
+                    e.reply_token,
+                    f"目前角色：{PERSONAS[persona]['display']}\n可選擇：{choices}",
+                )
+            )
+            return
+        key = None
+        for k, v in PERSONAS.items():
+            if name in (k, v["display"]):
+                key = k
+                break
+        if not key:
+            asyncio.create_task(quick_reply(e.reply_token, "找不到這個角色名稱喔～"))
+            return
+        cur.execute("UPDATE users SET persona = ? WHERE user_id = ?", (key, uid))
+        conn.commit()
+        persona = key
+        asyncio.create_task(quick_reply(e.reply_token, f"已切換為 {PERSONAS[key]['display']}"))
         return
 
     # ---------------------
@@ -291,8 +335,14 @@ def process(e, text: str):
         return
 
     # 取得回覆
+    wrappers = {
+        "rina": wrap_as_rina,
+        "sora": wrap_as_sora,
+        "mika": wrap_as_mika,
+    }
+    wrap_func = wrappers.get(persona, wrap_as_rina)
     reply_txt = (
-        wrap_as_rina(ask_openai(text)) if not is_over_token_quota() else "晴子醬今天嘴巴破皮...🥺"
+        wrap_func(ask_openai(text, persona)) if not is_over_token_quota() else "晴子醬今天嘴巴破皮...🥺"
     )
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(reply_token=e.reply_token, messages=[TextMessage(text=reply_txt)])
