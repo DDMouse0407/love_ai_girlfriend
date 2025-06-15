@@ -34,7 +34,8 @@ def ask_openai(prompt: str, persona: str = DEFAULT_PERSONA) -> str:
 
     except Exception as e:
         print(f"[ERROR] ChatGPT 失敗：{e}")
-        return "晴子醬今天有點累，晚點再陪你好不好～🥺"
+        display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
+        return f"{display_name}今天有點累，晚點再陪你好不好～🥺"
 
 def is_user_whitelisted(user_id: str) -> bool:
     return user_id in WHITELIST_USER_IDS
