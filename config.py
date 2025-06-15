@@ -4,6 +4,7 @@ import os
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_PROJECT_ID = os.getenv("OPENAI_PROJECT_ID")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 LINE_ACCESS_TOKEN = os.getenv("LINE_ACCESS_TOKEN")
 WHITELIST_USER_IDS = set(filter(None, os.getenv("WHITELIST_USER_IDS", "").split(",")))
