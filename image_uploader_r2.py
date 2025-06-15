@@ -4,6 +4,7 @@ from botocore.client import Config
 
 import config
 
+
 def upload_image_to_r2(image_bytes):
     access_key = config.R2_ACCESS_TOKEN
     secret_key = config.R2_SECRET_ACCESS_KEY
@@ -37,8 +38,12 @@ def upload_image_to_r2(image_bytes):
         print(f"[ERROR] R2 上傳失敗: {e}")
         raise RuntimeError(f"Cloudflare R2 上傳失敗: {e}")
 
+    final_url = f"{public_base.rstrip('/')}/{bucket}/{image_name}"
+    print(f"[DEBUG] 圖片網址為: {final_url}")
+    return final_url
 
-    def upload_audio_to_r2(audio_bytes, ext="mp3"):
+
+def upload_audio_to_r2(audio_bytes, ext="mp3"):
     """Upload audio data to R2 and return the public URL."""
     access_key = config.R2_ACCESS_TOKEN
     secret_key = config.R2_SECRET_ACCESS_KEY
@@ -74,8 +79,4 @@ def upload_image_to_r2(image_bytes):
 
     final_url = f"{public_base.rstrip('/')}/{bucket}/{audio_name}"
     print(f"[DEBUG] 語音網址為: {final_url}")
-    return final_url
-
-    final_url = f"{public_base.rstrip('/')}/{bucket}/{image_name}"
-    print(f"[DEBUG] 圖片網址為: {final_url}")
     return final_url

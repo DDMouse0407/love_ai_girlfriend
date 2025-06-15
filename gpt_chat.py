@@ -2,11 +2,12 @@ import json
 import requests
 import urllib.request
 import config
+from personas import PERSONAS, DEFAULT_PERSONA
 
 WHITELIST_USER_IDS = config.WHITELIST_USER_IDS
 print(f"💡 白名單 ID：{WHITELIST_USER_IDS}")
 
-def ask_openai(prompt: str) -> str:
+def ask_openai(prompt: str, persona: str = DEFAULT_PERSONA) -> str:
     try:
         print(f"[DEBUG] 向 OpenAI 發送訊息：{prompt}")
 
@@ -16,13 +17,14 @@ def ask_openai(prompt: str) -> str:
             "Content-Type": "application/json"
         }
 
+        persona_conf = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])
         payload = {
             "model": "gpt-4",
             "messages": [
-                {"role": "system", "content": "你是個可愛、溫柔、帶點撒嬌語氣的虛擬女友，叫晴子醬，講話帶有一點戀愛風格。"},
+                {"role": "system", "content": persona_conf["system"]},
                 {"role": "user", "content": prompt},
             ],
-            "temperature": 0.7
+            "temperature": 0.7,
         }
 
         res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=20)
