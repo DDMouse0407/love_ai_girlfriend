@@ -65,7 +65,7 @@ cur.execute(
         is_paid       INT DEFAULT 0,
         free_count    INT DEFAULT 10,
         paid_until    TEXT,
-        persona       TEXT DEFAULT 'rina'
+        persona       TEXT DEFAULT 'rina',
         group_personas TEXT
     )"""
 )
