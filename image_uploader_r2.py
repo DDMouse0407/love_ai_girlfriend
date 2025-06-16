@@ -1,4 +1,5 @@
 import uuid
+
 import boto3
 from botocore.client import Config
 
@@ -20,7 +21,7 @@ def upload_image_to_r2(image_bytes):
         endpoint_url=endpoint,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        config=Config(signature_version="s3v4")
+        config=Config(signature_version="s3v4"),
     )
 
     image_name = f"{uuid.uuid4().hex}.jpg"
@@ -29,10 +30,7 @@ def upload_image_to_r2(image_bytes):
     try:
         print(f"[DEBUG] 上傳至 R2: {key}")
         s3.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=image_bytes,
-            ContentType="image/jpeg"
+            Bucket=bucket, Key=key, Body=image_bytes, ContentType="image/jpeg"
         )
     except Exception as e:
         print(f"[ERROR] R2 上傳失敗: {e}")

@@ -1,4 +1,5 @@
 import io
+
 import openai
 from mutagen.mp3 import MP3
 

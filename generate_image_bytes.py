@@ -1,11 +1,13 @@
 import os
-import requests
+
 import replicate
+import requests
 
 import config
 
 if config.REPLICATE_API_TOKEN:
     os.environ.setdefault("REPLICATE_API_TOKEN", config.REPLICATE_API_TOKEN)
+
 
 def generate_image_bytes(prompt: str) -> bytes:
     try:
@@ -16,8 +18,8 @@ def generate_image_bytes(prompt: str) -> bytes:
                 "width": 768,
                 "height": 768,
                 "apply_watermark": False,
-                "num_inference_steps": 25
-            }
+                "num_inference_steps": 25,
+            },
         )
         # output 是 list of URLs，取第一張圖片來下載
         image_url = output[0]
