@@ -11,5 +11,4 @@ boto3
 apscheduler
 gTTS
 mutagen
-voicesimmer
-
+flyctl deploy
