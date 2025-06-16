@@ -7,12 +7,11 @@ import config
 
 def synthesize_speech(text: str):
     """Generate speech using the ElevenLabs API."""
-    url = (
-        "https://elevenlabs.io/app/voice-library?voiceId=9lHjugDhwqoxA5MhX0az"
-    )
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{config.ELEVENLABS_VOICE_ID}"
     headers = {
         "xi-api-key": config.ELEVENLABS_API_KEY,
         "Content-Type": "application/json",
+        "Accept": "audio/mpeg",
     }
     payload = {
         "text": text,
