@@ -1,4 +1,4 @@
-from style_prompt import wrap_as_rina, wrap_as_sora, wrap_as_mika
+from style_prompt import wrap_as_mika, wrap_as_rina, wrap_as_sora
 
 PERSONAS = {
     "rina": {

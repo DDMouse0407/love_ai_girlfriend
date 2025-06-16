@@ -1,11 +1,14 @@
 import json
-import requests
 import urllib.request
+
+import requests
+
 import config
-from personas import PERSONAS, DEFAULT_PERSONA
+from personas import DEFAULT_PERSONA, PERSONAS
 
 WHITELIST_USER_IDS = config.WHITELIST_USER_IDS
 print(f"💡 白名單 ID：{WHITELIST_USER_IDS}")
+
 
 def ask_openai(prompt: str, persona: str = DEFAULT_PERSONA) -> str:
     try:
@@ -14,7 +17,7 @@ def ask_openai(prompt: str, persona: str = DEFAULT_PERSONA) -> str:
         headers = {
             "Authorization": f"Bearer {config.OPENAI_API_KEY}",
             "OpenAI-Project": config.OPENAI_PROJECT_ID,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
         persona_conf = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])
@@ -27,7 +30,12 @@ def ask_openai(prompt: str, persona: str = DEFAULT_PERSONA) -> str:
             "temperature": 0.7,
         }
 
-        res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=20)
+        res = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=20,
+        )
         res.raise_for_status()
         print("[DEBUG] 回覆成功")
         return res.json()["choices"][0]["message"]["content"].strip()
@@ -37,14 +45,16 @@ def ask_openai(prompt: str, persona: str = DEFAULT_PERSONA) -> str:
         display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
         return f"{display_name}今天有點累，晚點再陪你好不好～🥺"
 
+
 def is_user_whitelisted(user_id: str) -> bool:
     return user_id in WHITELIST_USER_IDS
+
 
 def is_over_token_quota():
     try:
         headers = {
             "Authorization": f"Bearer {config.OPENAI_API_KEY}",
-            "OpenAI-Project": config.OPENAI_PROJECT_ID
+            "OpenAI-Project": config.OPENAI_PROJECT_ID,
         }
         req = urllib.request.Request(
             "https://api.openai.com/v1/dashboard/billing/usage", headers=headers

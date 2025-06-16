@@ -6,6 +6,7 @@ from datetime import datetime
 def _get_conn():
     return sqlite3.connect("users.db")
 
+
 def init_db():
     with closing(_get_conn()) as conn:
         c = conn.cursor()
@@ -19,6 +20,7 @@ def init_db():
         )
         conn.commit()
 
+
 def register_new_user(user_id):
     with closing(_get_conn()) as conn:
         c = conn.cursor()
@@ -28,6 +30,7 @@ def register_new_user(user_id):
         )
         conn.commit()
 
+
 def is_paid_user(user_id):
     with closing(_get_conn()) as conn:
         c = conn.cursor()
@@ -35,12 +38,14 @@ def is_paid_user(user_id):
         result = c.fetchone()
     return result is not None and result[0] == 1
 
+
 def has_free_trial(user_id):
     with closing(_get_conn()) as conn:
         c = conn.cursor()
         c.execute("SELECT free_count FROM users WHERE user_id = ?", (user_id,))
         result = c.fetchone()
     return result is not None and result[0] > 0
+
 
 def decrease_free_count(user_id):
     with closing(_get_conn()) as conn:
@@ -50,6 +55,7 @@ def decrease_free_count(user_id):
             (user_id,),
         )
         conn.commit()
+
 
 def mark_user_paid(user_id):
     with closing(_get_conn()) as conn:

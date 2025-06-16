@@ -1,39 +1,37 @@
+import asyncio
 import datetime
-import sqlite3
-import tempfile
-import uuid
 import logging
 import random
-import asyncio
-import pytz
+import sqlite3
+import tempfile
 import textwrap
+import uuid
 from pathlib import Path
 
 import openai
+import pytz
+import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
 from fastapi import FastAPI, Request
-import config
-import uvicorn
-
-from linebot.v3.webhook import WebhookHandler
+from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
+    AudioMessage,
+    ImageMessage,
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
-    ImageMessage,
-    AudioMessage,
 )
 from linebot.v3.messaging.api_client import ApiClient
 from linebot.v3.messaging.configuration import Configuration
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, AudioMessageContent
-from linebot.v3.exceptions import InvalidSignatureError
+from linebot.v3.webhook import WebhookHandler
+from linebot.v3.webhooks import AudioMessageContent, MessageEvent, TextMessageContent
 
-from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
-from personas import PERSONAS, DEFAULT_PERSONA
-
+import config
 from generate_image_bytes import generate_image_bytes
-from image_uploader_r2 import upload_image_to_r2, upload_audio_to_r2
+from gpt_chat import ask_openai, is_over_token_quota, is_user_whitelisted
+from image_uploader_r2 import upload_audio_to_r2, upload_image_to_r2
+from personas import DEFAULT_PERSONA, PERSONAS
 from tts import synthesize_speech
 
 # ---------------------------
@@ -85,12 +83,13 @@ if "group_personas" not in cols:
     cur.execute("ALTER TABLE users ADD COLUMN group_personas TEXT")
     conn.commit()
 
-FREE_QUOTA = 10     # 免費可用次數
-MONTH_LIMIT = 100   # 月訊息量上限（之後擴充）
+FREE_QUOTA = 10  # 免費可用次數
+MONTH_LIMIT = 100  # 月訊息量上限（之後擴充）
 
 # ---------------------------
 # 公用函式
 # ---------------------------
+
 
 def get_user(uid: str):
     """抓取／初始化使用者資料"""
@@ -117,28 +116,29 @@ def update_msg_stat(uid: str, decr_free: bool = False):
             (uid,),
         )
     else:
-        cur.execute("UPDATE users SET msg_count = msg_count + 1 WHERE user_id = ?", (uid,))
+        cur.execute(
+            "UPDATE users SET msg_count = msg_count + 1 WHERE user_id = ?", (uid,)
+        )
     conn.commit()
 
 
 def dec_free(uid: str):
-    cur.execute("UPDATE users SET free_count = free_count - 1 WHERE user_id = ?", (uid,))
+    cur.execute(
+        "UPDATE users SET free_count = free_count - 1 WHERE user_id = ?", (uid,)
+    )
     conn.commit()
 
 
 def transcribe_audio(p: Path) -> str:
     with p.open("rb") as f:
-        return (
-            openai.audio.transcriptions.create(
-                model="whisper-1",
-                file=f,
-                response_format="text",
-                language="zh",
-                prompt=PROMPT,
-                temperature=0,
-            )
-            .strip()
-    )
+        return openai.audio.transcriptions.create(
+            model="whisper-1",
+            file=f,
+            response_format="text",
+            language="zh",
+            prompt=PROMPT,
+            temperature=0,
+        ).strip()
 
 
 def _romanticize(text: str) -> str:
@@ -160,6 +160,20 @@ def _romanticize(text: str) -> str:
     ]
     return f"{random.choice(openings)}{random.choice(bridges)}{text}，{random.choice(endings)}"
 
+
+async def quick_reply(reply_token: str, text: str) -> None:
+    """Send a simple text reply via LINE."""
+    try:
+        line_bot_api.reply_message_with_http_info(
+            ReplyMessageRequest(
+                reply_token=reply_token,
+                messages=[TextMessage(text=text)],
+            )
+        )
+    except Exception as exc:
+        logging.exception("quick_reply: %s", exc)
+
+
 # LINE 事件
 # ---------------------------
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -179,8 +193,12 @@ def on_audio(e):
         txt = transcribe_audio(tmp)
     except Exception as er:
         logging.exception("ASR: %s", er)
-        display_name = PERSONAS.get(get_user(uid)[4], PERSONAS[DEFAULT_PERSONA])["display"]
-        asyncio.create_task(quick_reply(e.reply_token, f"{display_name}聽不懂這段語音🥺"))
+        display_name = PERSONAS.get(get_user(uid)[4], PERSONAS[DEFAULT_PERSONA])[
+            "display"
+        ]
+        asyncio.create_task(
+            quick_reply(e.reply_token, f"{display_name}聽不懂這段語音🥺")
+        )
         return
     process(e, txt)
 
@@ -189,6 +207,7 @@ def on_audio(e):
 # 指令邏輯
 # ---------------------------
 
+
 def process(e, text: str):
     uid = e.source.user_id
 
@@ -196,7 +215,12 @@ def process(e, text: str):
     msg_cnt, paid, free_cnt, until, persona, group_personas = get_user(uid)
 
     # 會員是否過期 → 自動取消
-    if paid and until and datetime.datetime.strptime(until, "%Y-%m-%d").date() < datetime.datetime.now(tz).date():
+    if (
+        paid
+        and until
+        and datetime.datetime.strptime(until, "%Y-%m-%d").date()
+        < datetime.datetime.now(tz).date()
+    ):
         paid = 0
         cur.execute("UPDATE users SET is_paid = 0 WHERE user_id = ?", (uid,))
         conn.commit()
@@ -228,7 +252,9 @@ def process(e, text: str):
         link = f"https://p.ecpay.com.tw/97C358E?customField={uid}"
         display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
         asyncio.create_task(
-            quick_reply(e.reply_token, f"點我付款開通 / 續費{display_name} 💖\n🔗 {link}")
+            quick_reply(
+                e.reply_token, f"點我付款開通 / 續費{display_name} 💖\n🔗 {link}"
+            )
         )
         return
 
@@ -238,8 +264,13 @@ def process(e, text: str):
     if text == "/狀態查詢":
         if paid:
             days_left = (
-                datetime.datetime.strptime(until, "%Y-%m-%d").date() - datetime.datetime.now(tz).date()
-            ).days if until else 0
+                (
+                    datetime.datetime.strptime(until, "%Y-%m-%d").date()
+                    - datetime.datetime.now(tz).date()
+                ).days
+                if until
+                else 0
+            )
             asyncio.create_task(
                 quick_reply(
                     e.reply_token,
@@ -280,7 +311,9 @@ def process(e, text: str):
         cur.execute("UPDATE users SET persona = ? WHERE user_id = ?", (key, uid))
         conn.commit()
         persona = key
-        asyncio.create_task(quick_reply(e.reply_token, f"已切換為 {PERSONAS[key]['display']}"))
+        asyncio.create_task(
+            quick_reply(e.reply_token, f"已切換為 {PERSONAS[key]['display']}")
+        )
         return
 
     # ---------------------
@@ -290,7 +323,9 @@ def process(e, text: str):
         names = text.replace("/群組", "", 1).strip()
         if not names:
             if group_personas:
-                display = "、".join(PERSONAS[p]["display"] for p in group_personas.split(","))
+                display = "、".join(
+                    PERSONAS[p]["display"] for p in group_personas.split(",")
+                )
                 msg = f"目前群組角色：{display}\n輸入 '/群組 角色1 角色2' 重新設定，或 '/群組 取消' 停用"
             else:
                 msg = "尚未設定群組角色。輸入 '/群組 角色1 角色2' 啟用"
@@ -298,7 +333,9 @@ def process(e, text: str):
             return
 
         if names in ("取消", "關閉"):
-            cur.execute("UPDATE users SET group_personas = NULL WHERE user_id = ?", (uid,))
+            cur.execute(
+                "UPDATE users SET group_personas = NULL WHERE user_id = ?", (uid,)
+            )
             conn.commit()
             group_personas = None
             asyncio.create_task(quick_reply(e.reply_token, "已停用群組聊天"))
@@ -312,9 +349,14 @@ def process(e, text: str):
                     break
         keys = list(dict.fromkeys(keys))
         if len(keys) < 2:
-            asyncio.create_task(quick_reply(e.reply_token, "請至少指定兩個有效角色名稱"))
+            asyncio.create_task(
+                quick_reply(e.reply_token, "請至少指定兩個有效角色名稱")
+            )
             return
-        cur.execute("UPDATE users SET group_personas = ? WHERE user_id = ?", (",".join(keys), uid))
+        cur.execute(
+            "UPDATE users SET group_personas = ? WHERE user_id = ?",
+            (",".join(keys), uid),
+        )
         conn.commit()
         group_personas = ",".join(keys)
         disp = "、".join(PERSONAS[k]["display"] for k in keys)
@@ -334,7 +376,11 @@ def process(e, text: str):
         can_use = paid or is_user_whitelisted(uid) or free_cnt > 0
         if not can_use:
             display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
-            asyncio.create_task(quick_reply(e.reply_token, f"免費次數用完，輸入 /購買 開通{display_name}💖"))
+            asyncio.create_task(
+                quick_reply(
+                    e.reply_token, f"免費次數用完，輸入 /購買 開通{display_name}💖"
+                )
+            )
             return
 
         try:
@@ -354,7 +400,9 @@ def process(e, text: str):
         except Exception as er:
             logging.exception("/畫圖: %s", er)
             display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
-            asyncio.create_task(quick_reply(e.reply_token, f"{display_name}畫畫失敗⋯稍後再試🥺"))
+            asyncio.create_task(
+                quick_reply(e.reply_token, f"{display_name}畫畫失敗⋯稍後再試🥺")
+            )
         return
 
     # ---------------------
@@ -374,7 +422,9 @@ def process(e, text: str):
             )
         except Exception as er:
             logging.exception("/朗讀: %s", er)
-            asyncio.create_task(quick_reply(e.reply_token, f"{display_name}朗讀失敗⋯🥺"))
+            asyncio.create_task(
+                quick_reply(e.reply_token, f"{display_name}朗讀失敗⋯🥺")
+            )
         return
 
     # ---------------------
@@ -383,7 +433,11 @@ def process(e, text: str):
     can_chat = paid or is_user_whitelisted(uid) or free_cnt > 0
     if not can_chat:
         display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
-        asyncio.create_task(quick_reply(e.reply_token, f"免費體驗已用完，輸入 /購買 解鎖{display_name}💖"))
+        asyncio.create_task(
+            quick_reply(
+                e.reply_token, f"免費體驗已用完，輸入 /購買 解鎖{display_name}💖"
+            )
+        )
         return
 
     # 取得回覆
@@ -407,7 +461,9 @@ def process(e, text: str):
         else:
             reply_txt = wrap_func(ask_openai(text, persona))
     line_bot_api.reply_message_with_http_info(
-        ReplyMessageRequest(reply_token=e.reply_token, messages=[TextMessage(text=reply_txt)])
+        ReplyMessageRequest(
+            reply_token=e.reply_token, messages=[TextMessage(text=reply_txt)]
+        )
     )
 
     # 更新統計 & 免費額度
@@ -469,7 +525,12 @@ def broadcast_random():
 
 def schedule_next_random():
     now = datetime.datetime.now(tz)
-    run = now.replace(hour=random.randint(9, 22), minute=random.choice([0, 30]), second=0, microsecond=0)
+    run = now.replace(
+        hour=random.randint(9, 22),
+        minute=random.choice([0, 30]),
+        second=0,
+        microsecond=0,
+    )
     if run <= now:
         run += datetime.timedelta(days=1)
     sched.add_job(broadcast_random, trigger=DateTrigger(run_date=run))
@@ -488,15 +549,25 @@ schedule_next_random()
 # 會員到期前提醒（每天 10:00）
 # ---------------------------
 
+
 def send_expiry_reminders():
-    tomorrow = (datetime.datetime.now(tz) + datetime.timedelta(days=1)).date().isoformat()
-    cur.execute("SELECT user_id, paid_until, persona FROM users WHERE is_paid = 1 AND paid_until = ?", (tomorrow,))
+    tomorrow = (
+        (datetime.datetime.now(tz) + datetime.timedelta(days=1)).date().isoformat()
+    )
+    cur.execute(
+        "SELECT user_id, paid_until, persona FROM users WHERE is_paid = 1 AND paid_until = ?",
+        (tomorrow,),
+    )
     for uid, date_str, persona in cur.fetchall():
         display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
         try:
             line_bot_api.push_message(
                 uid,
-                [TextMessage(text=f"{display_name}提醒：會員將於 {date_str} 到期～\n輸入 /幫我續費 立即續約 💖")],
+                [
+                    TextMessage(
+                        text=f"{display_name}提醒：會員將於 {date_str} 到期～\n輸入 /幫我續費 立即續約 💖"
+                    )
+                ],
             )
         except Exception as e:
             logging.exception("reminder push: %s", e)
