@@ -11,4 +11,3 @@ boto3
 apscheduler
 gTTS
 mutagen
-flyctl deploy
