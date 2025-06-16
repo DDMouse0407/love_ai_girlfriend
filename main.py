@@ -140,16 +140,52 @@ def transcribe_audio(p: Path) -> str:
     )
 
 
+def _romanticize(text: str) -> str:
+    """Return text rewritten in a romantic tone."""
+    openings = [
+        "親愛的，",
+        "嗨～寶貝，",
+        "嘿，親親，",
+    ]
+    bridges = [
+        "其實呢，",
+        "說真的，",
+        "我想告訴你，",
+    ]
+    endings = [
+        "嘿嘿～",
+        "嘻嘻～",
+        "愛你唷！",
+    ]
+    return f"{random.choice(openings)}{random.choice(bridges)}{text}，{random.choice(endings)}"
+
+
+def _apply_voice_simmer(mp3_bytes: bytes) -> bytes:
+    """Smooth the generated speech using voice simmer if available."""
+    try:
+        from voicesimmer import VoiceSimmer
+    except Exception:
+        return mp3_bytes
+
+    simmer = VoiceSimmer()
+    try:
+        return simmer.simmer_bytes(mp3_bytes)
+    except Exception:
+        return mp3_bytes
+
+
 def synthesize_speech(text: str) -> tuple[bytes, int]:
-    """Convert text to speech and return audio bytes and duration (ms)."""
+    """Convert text to speech in a sweet romantic style."""
     from gtts import gTTS
     from mutagen.mp3 import MP3
     import io
 
+    text = _romanticize(text)
+
     # generate speech using gTTS
     buf = io.BytesIO()
     gTTS(text=text, lang="zh-tw").write_to_fp(buf)
-    mp3_bytes = buf.getvalue()
+    mp3_bytes = _apply_voice_simmer(buf.getvalue())
 
     # calculate duration using mutagen (no ffmpeg required)
     audio = MP3(io.BytesIO(mp3_bytes))
