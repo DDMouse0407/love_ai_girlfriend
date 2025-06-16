@@ -159,34 +159,6 @@ def _romanticize(text: str) -> str:
     ]
     return f"{random.choice(openings)}{random.choice(bridges)}{text}，{random.choice(endings)}"
 
-
-def synthesize_speech(text: str) -> tuple[bytes, int]:
-    """Convert text to speech in a sweet romantic style."""
-    from gtts import gTTS
-    from mutagen.mp3 import MP3
-    import io
-
-    text = _romanticize(text)
-
-    # generate speech using gTTS
-    buf = io.BytesIO()
-    gTTS(text=text, lang="zh-tw").write_to_fp(buf)
-    mp3_bytes = buf.getvalue()
-
-    # calculate duration using mutagen (no ffmpeg required)
-    audio = MP3(io.BytesIO(mp3_bytes))
-    duration_ms = int(audio.info.length * 1000)
-
-    return mp3_bytes, duration_ms
-
-async def quick_reply(token: str, text: str):
-    """非同步回覆文字，避免阻塞"""
-    line_bot_api.reply_message_with_http_info(
-        ReplyMessageRequest(reply_token=token, messages=[TextMessage(text=text)])
-    )
-
-
-# ---------------------------
 # LINE 事件
 # ---------------------------
 @handler.add(MessageEvent, message=TextMessageContent)
