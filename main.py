@@ -34,6 +34,7 @@ from personas import PERSONAS, DEFAULT_PERSONA
 
 from generate_image_bytes import generate_image_bytes
 from image_uploader_r2 import upload_image_to_r2, upload_audio_to_r2
+from tts import synthesize_speech
 
 # ---------------------------
 # 基本設定
