@@ -1,8 +1,18 @@
 import io
 import requests
 from mutagen.mp3 import MP3
+from pydub import AudioSegment
 
 import config
+
+
+def _change_speed(sound: AudioSegment, speed: float) -> AudioSegment:
+    """Return a new AudioSegment with adjusted playback speed."""
+    if speed == 1.0:
+        return sound
+    new_frame_rate = int(sound.frame_rate * speed)
+    altered = sound._spawn(sound.raw_data, overrides={"frame_rate": new_frame_rate})
+    return altered.set_frame_rate(sound.frame_rate)
 
 
 def synthesize_speech(text: str):
@@ -22,7 +32,15 @@ def synthesize_speech(text: str):
     res.raise_for_status()
     audio_bytes = res.content
     try:
-        dur = int(MP3(io.BytesIO(audio_bytes)).info.length * 1000)
+        audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
+        audio = _change_speed(audio, config.TTS_SPEED)
+        dur = len(audio)
+        out = io.BytesIO()
+        audio.export(out, format="mp3")
+        audio_bytes = out.getvalue()
     except Exception:
-        dur = len(text) * 100  # naive fallback
+        try:
+            dur = int(MP3(io.BytesIO(audio_bytes)).info.length * 1000)
+        except Exception:
+            dur = len(text) * 100  # naive fallback
     return audio_bytes, dur

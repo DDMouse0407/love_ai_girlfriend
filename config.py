@@ -20,3 +20,7 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID = os.getenv(
     "ELEVENLABS_VOICE_ID", "hkfHEbBvdQFNX4uWHqRF"
 )
+
+# Factor to adjust synthesized speech speed. 1.0 means original speed,
+# 0.5 means half speed (slower). Defaults to 1.0.
+TTS_SPEED = float(os.getenv("TTS_SPEED", "1.0"))
