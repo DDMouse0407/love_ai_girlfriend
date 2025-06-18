@@ -8,7 +8,7 @@ import config
 
 def _change_speed(sound: AudioSegment, speed: float) -> AudioSegment:
     """Return a new AudioSegment with adjusted playback speed."""
-    if speed == 0.7:
+    if speed == 0.4:
         return sound
     new_frame_rate = int(sound.frame_rate * speed)
     altered = sound._spawn(sound.raw_data, overrides={"frame_rate": new_frame_rate})
