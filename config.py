@@ -18,9 +18,9 @@ R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
 R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID = os.getenv(
-    "ELEVENLABS_VOICE_ID", "hkfHEbBvdQFNX4uWHqRF"
+    "ELEVENLABS_VOICE_ID", "9lHjugDhwqoxA5MhX0az"
 )
 
 # Factor to adjust synthesized speech speed. 1.0 means original speed,
 # 0.5 means half speed (slower). Defaults to 1.0.
-TTS_SPEED = float(os.getenv("TTS_SPEED", "1.0"))
+TTS_SPEED = float(os.getenv("TTS_SPEED", "0.8"))
