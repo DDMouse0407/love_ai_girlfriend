@@ -29,8 +29,8 @@ def synthesize_speech(text: str):
     "voice_settings": {
         "stability": 0.45,
         "similarity_boost": 0.8,
-        "speed": 0.85
-        "style": 0.3
+        "speed": 0.85,
+        "style": 0.3,
     },
 }
     res = requests.post(url, headers=headers, json=payload)
