@@ -27,7 +27,7 @@ def synthesize_speech(text: str):
     "text": text,
     "model_id": "eleven_monolingual_v1",
     "voice_settings": {
-        "stability": 0.6,
+        "stability": 0.45,
         "similarity_boost": 0.8,
         "speed": 0.85
     },
