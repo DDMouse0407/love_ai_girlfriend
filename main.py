@@ -260,6 +260,7 @@ def process(e, text: str):
             "/角色 [名稱] → 切換聊天角色\n"
             "/群組 [A B] → 啟用多角色群聊 (輸入 '/群組 取消' 關閉)\n"
             "/help          → 本幫助\n"
+            "(系統每日三餐自動提醒)\n"
         )
         asyncio.create_task(quick_reply(e.reply_token, help_msg))
         return
@@ -632,8 +633,6 @@ sched.add_job(lambda: broadcast(auto_msgs["noon"]), "cron", hour=11, minute=30)
 sched.add_job(lambda: broadcast(auto_msgs["night"]), "cron", hour=22, minute=0)
 
 # 隨機主題
-schedule_next_random()
-
 
 # ---------------------------
 # 會員到期前提醒（每天 10:00）
@@ -665,8 +664,20 @@ def send_expiry_reminders():
 
 sched.add_job(send_expiry_reminders, "cron", hour=10, minute=0)
 
-# 啟動 Scheduler
-sched.start()
+
+@app.on_event("startup")
+def start_scheduler() -> None:
+    """Start background scheduler when the app starts."""
+    schedule_next_random()
+    sched.start()
+    logging.info("Scheduler started")
+
+
+@app.on_event("shutdown")
+def shutdown_scheduler() -> None:
+    """Shutdown background scheduler when the app stops."""
+    sched.shutdown()
+    logging.info("Scheduler stopped")
 
 # ---------------------------
 # 執行 FastAPI
