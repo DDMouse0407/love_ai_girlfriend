@@ -17,7 +17,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 import os
 from dotenv import load_dotenv
-from ecpay_utils import gen_check_mac_value
+from payment_gateway import generate_check_mac_value
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
     AudioMessage,
@@ -56,6 +56,16 @@ line_bot_api = MessagingApi(api_client=api_client)
 # Time‑zone & Logger
 tz = pytz.timezone("Asia/Taipei")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+# Supported payment plans mapped by amount
+PLANS = {
+    39: ("體驗曖昧包", 1),
+    99: ("微醺戀人包", 3),
+    149: ("夜間心動包", 5),
+    189: ("一週戀愛包", 7),
+    329: ("深度陪伴包", 14),
+    579: ("戀人正式包", 30),
+}
 
 # OpenAI
 openai.api_key = config.OPENAI_API_KEY
@@ -528,7 +538,7 @@ def checkout():
         "ChoosePayment": "ALL",
     }
 
-    params["CheckMacValue"] = gen_check_mac_value(params, HASH_KEY, HASH_IV)
+    params["CheckMacValue"] = generate_check_mac_value(params, HASH_KEY, HASH_IV)
 
     html_form = f"""
     <form id="ecpay_form" method="post" action="https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5">
@@ -542,7 +552,32 @@ def checkout():
 @app.post("/payment_callback")
 async def payment_callback(request: Request):
     form_data = await request.form()
-    print("ECPay 回傳資料：", form_data)
+    logging.info("ECPay 回傳資料：%s", form_data)
+
+    uid = form_data.get("CustomField1")
+    try:
+        amt = int(form_data.get("TradeAmt", 0))
+    except ValueError:
+        amt = 0
+    plan = PLANS.get(amt)
+
+    if uid and plan:
+        days = plan[1]
+        cur.execute("SELECT paid_until FROM users WHERE user_id = ?", (uid,))
+        row = cur.fetchone()
+        today = datetime.datetime.now(tz).date()
+        if row and row[0]:
+            current = datetime.datetime.strptime(row[0], "%Y-%m-%d").date()
+            base = current if current >= today else today
+        else:
+            base = today
+        new_until = base + datetime.timedelta(days=days)
+        cur.execute(
+            "UPDATE users SET is_paid = 1, paid_until = ? WHERE user_id = ?",
+            (new_until.isoformat(), uid),
+        )
+        conn.commit()
+
     return "1|OK"
 
 

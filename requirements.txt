@@ -4,11 +4,8 @@ line-bot-sdk
 openai
 python-dotenv
 requests
-Pillow
-gradio
 replicate
 boto3
 apscheduler
-gTTS
 mutagen
 pydub
