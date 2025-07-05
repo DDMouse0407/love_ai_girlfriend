@@ -17,7 +17,7 @@ def _change_speed(sound: AudioSegment, speed: float) -> AudioSegment:
 
 def synthesize_speech(text: str):
     """Generate speech using the ElevenLabs API."""
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{config.ELEVENLABS_VOICE_ID}"
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{config.ELEVENLABS_VOICE_ID or 'nova'}"
     headers = {
         "xi-api-key": config.ELEVENLABS_API_KEY,
         "Content-Type": "application/json",
