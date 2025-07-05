@@ -24,10 +24,14 @@ def synthesize_speech(text: str):
         "Accept": "audio/mpeg",
     }
     payload = {
-        "text": text,
-        "model_id": "eleven_monolingual_v1",
-        "voice_settings": {"stability": 0.6, "similarity_boost": 0.8},
-    }
+    "text": text,
+    "model_id": "eleven_monolingual_v1",
+    "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.8,
+        "speed": 0.85
+    },
+}
     res = requests.post(url, headers=headers, json=payload)
     res.raise_for_status()
     audio_bytes = res.content
