@@ -13,7 +13,11 @@ import pytz
 import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse
+import os
+from dotenv import load_dotenv
+from ecpay_utils import gen_check_mac_value
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
     AudioMessage,
@@ -38,6 +42,11 @@ from tts import synthesize_speech
 # 基本設定
 # ---------------------------
 app = FastAPI()
+load_dotenv()
+
+MERCHANT_ID = os.getenv("ECPAY_MERCHANT_ID")
+HASH_KEY = os.getenv("ECPAY_HASH_KEY")
+HASH_IV = os.getenv("ECPAY_HASH_IV")
 handler = WebhookHandler(config.LINE_CHANNEL_SECRET)
 
 line_cfg = Configuration(access_token=config.LINE_ACCESS_TOKEN)
@@ -489,6 +498,52 @@ async def callback(req: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+def root():
+    return """
+    <h2>AI 女友付款測試</h2>
+    <form method="post" action="/ecpay_checkout">
+        <button type="submit">我要付款</button>
+    </form>
+    """
+
+
+@app.post("/ecpay_checkout", response_class=HTMLResponse)
+def checkout():
+    order_id = str(uuid.uuid4()).replace("-", "")[:20]
+    now = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+
+    params = {
+        "MerchantID": MERCHANT_ID,
+        "MerchantTradeNo": order_id,
+        "MerchantTradeDate": now,
+        "PaymentType": "aio",
+        "TotalAmount": "50",
+        "TradeDesc": "AI 女友戀愛聊天服務",
+        "ItemName": "體驗曖昧包(1日)",
+        "ReturnURL": "https://你的網址/payment_callback",
+        "ClientBackURL": "https://你的網址/success",
+        "ChoosePayment": "ALL",
+    }
+
+    params["CheckMacValue"] = gen_check_mac_value(params, HASH_KEY, HASH_IV)
+
+    html_form = f"""
+    <form id="ecpay_form" method="post" action="https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5">
+        {''.join(f'<input type="hidden" name="{k}" value="{v}"/>' for k, v in params.items())}
+    </form>
+    <script>document.getElementById("ecpay_form").submit();</script>
+    """
+    return HTMLResponse(content=html_form)
+
+
+@app.post("/payment_callback")
+async def payment_callback(request: Request):
+    form_data = await request.form()
+    print("ECPay 回傳資料：", form_data)
+    return "1|OK"
 
 
 # ---------------------------
