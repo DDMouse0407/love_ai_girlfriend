@@ -25,11 +25,12 @@ def synthesize_speech(text: str):
     }
     payload = {
     "text": text,
-    "model_id": "eleven_monolingual_v1",
+    "model_id": "eleven_multilingual_v2",
     "voice_settings": {
         "stability": 0.45,
         "similarity_boost": 0.8,
         "speed": 0.85
+        "style": 0.3
     },
 }
     res = requests.post(url, headers=headers, json=payload)
