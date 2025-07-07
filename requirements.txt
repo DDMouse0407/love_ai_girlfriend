@@ -10,3 +10,4 @@ apscheduler
 mutagen
 pydub
 pytz
+httpx

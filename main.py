@@ -555,6 +555,13 @@ async def payment_callback(request: Request):
     form_data = await request.form()
     logging.info("ECPay 回傳資料：%s", form_data)
 
+    data = dict(form_data)
+    check_mac = data.get("CheckMacValue")
+    calculated = generate_check_mac_value(data, HASH_KEY, HASH_IV)
+    if check_mac != calculated:
+        logging.warning("Invalid CheckMacValue: %s != %s", check_mac, calculated)
+        return "0|FAIL"
+
     uid = form_data.get("CustomField1")
     try:
         amt = int(form_data.get("TradeAmt", 0))
