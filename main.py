@@ -269,7 +269,7 @@ def process(e, text: str):
     # /購買 /幫我續費
     # ---------------------
     if text in ("/購買", "/幫我續費"):
-        link = f"https://p.ecpay.com.tw/97C358E?customField={uid}"
+        link = f"https://rghehlk4bi.cashier.ecpay.com.tw"
         display_name = PERSONAS.get(persona, PERSONAS[DEFAULT_PERSONA])["display"]
         asyncio.create_task(
             quick_reply(
